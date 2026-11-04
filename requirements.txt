@@ -1,0 +1,11 @@
+pandas
+numpy
+openpyxl
+scikit-learn
+scipy
+lightgbm
+statsmodels
+holidays
+pillow
+jupyter
+matplotlib

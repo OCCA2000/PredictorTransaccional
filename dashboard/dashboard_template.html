@@ -1,0 +1,1930 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BaNCS Forecast</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* ============ Tokens ============
+     Mismos tokens que el resto de sitios basados en la plantilla TCS: fondo negro, texto #F4F6F8,
+     azul #3D8FE0 y dorado #F2B233 (adorno). El dato pronosticado usa el dorado oscuro #C28815: el de
+     marca es demasiado claro para una línea de datos (fuera de la banda de luminosidad del validador).
+     Siempre oscuro (los logos son blancos). Real = azul continuo; pronóstico = dorado punteado. */
+  :root{
+    --bg:#000000; --surface:#10141A; --surface-alt:#171C23; --surface-sunken:#0A0D11;
+    --text:#F4F6F8; --text-muted:#9DA7B3; --border:#232A33; --border-strong:#343D48;
+    --blue:#1C5FB8; --brand:#3D8FE0; --brand-bright:#5AA3EA; --brand-soft:rgba(61,143,224,.16);
+    --gold:#F2B233; --gold-soft:rgba(242,178,51,.14);
+    --gradient:linear-gradient(90deg,#1C5FB8 0%,#3D8FE0 40%,#8FB6C9 62%,#F2B233 100%);
+    --good:#46C28E; --warn:#F08C3A; --crit:#E5625E;
+    --chart-hist:#3D8FE0; --chart-pred:#C28815; --chart-pred-fill:rgba(194,136,21,.22);
+    --chart-grid:#1E252E; --chart-cut:#6B7683; --chart-hist-fill:rgba(61,143,224,.10); --zone2:rgba(107,118,131,.10); --zone3:rgba(107,118,131,.20);
+    --radius-s:6px; --radius-m:10px; --radius-l:14px; --shadow-1:0 1px 2px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:'Open Sans',system-ui,sans-serif;font-size:14px;line-height:1.45}
+  body.bw .charts, body.bw .kpis, body.bw .segbar button.active{filter:grayscale(1)}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 16px 48px;display:flex;flex-direction:column;gap:16px}
+  .wrap > *{min-width:0}
+  header.top{position:relative;overflow:hidden;margin-inline:calc(50% - 50vw);padding:22px max(16px,calc(50vw - 640px)) 64px;background:#000;border-bottom:2px solid transparent;border-image:var(--gradient) 1}
+  header.top > *{position:relative;z-index:1}
+  #wave{position:absolute;left:0;right:0;bottom:0;width:100%;height:110px;z-index:0;pointer-events:none;opacity:.7;-webkit-mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.35) 30%,#000 70%);mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.35) 30%,#000 70%)}
+  .brandbar{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-bottom:34px}
+  .brandbar img{display:block}
+  #logo-tcs{height:44px;width:auto}
+  #logo-tata{height:38px;width:auto}
+  .brandright{display:flex;align-items:center;gap:18px}
+  .viewtoggle{display:inline-flex;gap:4px;background:var(--surface);border:1px solid var(--border-strong);border-radius:999px;padding:4px}
+  .viewtoggle button{width:34px;height:34px;border-radius:50%;border:2px solid transparent;background:none;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+  .viewtoggle button.active{border-color:var(--brand);background:var(--brand-soft)}
+  .viewtoggle .ic-color{display:block;width:20px;height:20px;border-radius:50%;background:conic-gradient(from 200deg,#3D8FE0,#1C5FB8,#F2B233,#3D8FE0)}
+  .viewtoggle .ic-bw{display:block;width:20px;height:20px;border-radius:50%;border:1.5px solid #D8D7E0;background:linear-gradient(90deg,#D8D7E0 50%,transparent 50%)}
+  h1{margin:0;font-size:clamp(26px,3.4vw,40px);font-weight:300;letter-spacing:-.005em;line-height:1.15;color:#fff}
+  .subtitle{margin:6px 0 0;font-size:clamp(15px,1.6vw,19px);font-weight:300;color:#DDE2E7}
+  .fechatxt{margin:10px 0 0;font-size:13px;font-weight:400;color:var(--text-muted)}
+  @media (max-width:560px){ #logo-tcs{height:30px} #logo-tata{height:22px} .brandright{gap:10px} .brandbar{margin-bottom:22px} }
+  .wave{height:3px;background:var(--gradient);border-radius:3px}
+  .small{font-size:12px;color:var(--text-muted)}
+  .lead{margin:2px 0 0;color:var(--text-muted);font-size:13px;max-width:900px}
+  .note{margin:10px 0 0;font-size:12px;color:var(--text-muted);max-width:980px}
+  .num{font-family:'IBM Plex Mono',monospace;font-weight:500}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-l);box-shadow:var(--shadow-1)}
+  .panel-pad{padding:18px 20px}
+  .chartcard{padding:16px 18px 10px}
+  .chartcard-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+
+  /* Pestañas */
+  .tabs{display:flex;gap:6px;border-bottom:1px solid var(--border)}
+  .tabs button{background:none;border:none;color:var(--text-muted);font:inherit;font-weight:600;font-size:15px;padding:10px 18px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+  .tabs button:hover{color:var(--text)}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--brand)}
+  .tabpanel{display:none;flex-direction:column;gap:16px}
+  /* Bloques de la pestaña de procesos: cada uno con su propio control de tiempo */
+  .bloque{border-left:4px solid var(--brand)}
+  .bloque.dia{border-left-color:var(--gold);margin-top:18px}
+  .bloque-tit{display:flex;align-items:center;gap:10px}
+  .bloque-tit h2{margin:0;font-size:18px}
+  .bloque-sub{border-left:4px solid var(--border-strong)}
+  .bloque.cola{border-left-color:#8FB6C9;margin-top:18px}
+  .bloque.sim{border-left-color:var(--gold);margin-top:18px}
+  #c-chart{cursor:pointer}
+  #p-gen,#p-reg,#p-dur{cursor:pointer}
+  /* Tarjetas de la noche: 4 columnas fijas; la de contabilidad ocupa dos */
+  #p-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #p-kpis .kpi-conta{grid-column:span 2;background:var(--surface-alt)}
+  .conta-vals{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}
+  @media (max-width:900px){ #p-kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  #p-tabla-dias tbody tr{cursor:pointer}
+  .tabpanel.active{display:flex}
+
+  /* Controles */
+  .controls{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .row.between{justify-content:space-between}
+  .segbar{display:inline-flex;background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-s);padding:2px;gap:2px}
+  .segbar button{background:none;border:none;color:var(--text-muted);font:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:4px;cursor:pointer}
+  .segbar button:hover{color:var(--text)}
+  .segbar button.active{background:var(--brand-soft);color:var(--text);box-shadow:inset 0 0 0 1px var(--brand)}
+  .field{display:flex;align-items:center;gap:6px}
+  .field label{font-size:12px;color:var(--text-muted)}
+  input[type=date],select,input[type=number]{background:var(--surface-sunken);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-s);padding:6px 8px;font:inherit;font-size:13px;color-scheme:dark}
+  button.btn{background:var(--surface-sunken);color:var(--text);border:1px solid var(--border-strong);border-radius:var(--radius-s);padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+  button.btn:hover{border-color:var(--brand)}
+  button.toggle{background:var(--surface);border:1px solid var(--border-strong);color:var(--text-muted);border-radius:var(--radius-s);padding:6px 12px;cursor:pointer;font:inherit;font-size:12px}
+  button.toggle:hover{color:var(--text)}
+
+  /* KPIs */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:var(--border);border-radius:var(--radius-l);overflow:hidden;box-shadow:var(--shadow-1)}
+  @media (max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--surface);padding:16px 18px;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .k-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700}
+  .k-value{font-size:24px;font-weight:600;white-space:nowrap}
+  .k-sub{font-size:12px;color:var(--text-muted)}
+  /* ---------- Reposting ---------- */
+  .kpis.picos{margin-top:10px}
+  .kpis.picos .kpi{background:var(--surface-alt)}
+  /* récords históricos: contorno y punto rojo tenue, para distinguirlos de las tarjetas del período sin llamar la atención */
+  .kpis.picos{border:1px solid rgba(229,98,94,.30)}
+  .kpis.picos .k-label::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(229,98,94,.70);margin-right:7px;vertical-align:1px}
+
+  /* Gráficos */
+  .chart-area{width:100%;min-height:360px}
+  .legend-note{display:flex;flex-wrap:wrap;gap:6px 18px;padding:4px 2px 8px;font-size:12px;color:var(--text-muted)}
+  .legend-note span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{display:inline-block;width:18px;height:0;border-top:2px solid;vertical-align:middle}
+  .swatch.hist{border-color:var(--chart-hist)}
+  .swatch.pred{border-top:2px dashed var(--chart-pred)}
+  .swatch.band{height:10px;width:16px;border:none;background:var(--chart-pred-fill)}
+  .swatch.z2{height:10px;width:16px;border:none;background:var(--zone2);outline:1px solid var(--border-strong)}
+  .swatch.z3{height:10px;width:16px;border:none;background:var(--zone3);outline:1px solid var(--border-strong)}
+  .swatch.cut{border-top:2px dashed var(--chart-cut)}
+  .swatch.box1{height:10px;width:12px;border:none;background:#3D8FE0}
+  .swatch.box2{height:10px;width:12px;border:none;background:#F4F3F9}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .grid3>*,.grid2>*{min-width:0}
+  @media (max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+  .view-table{margin-top:6px}
+  details.vt summary{cursor:pointer;color:var(--text-muted);font-size:12px;padding:4px 0}
+
+  /* Tablas */
+  .hcel{position:relative;border:1px solid var(--c);border-radius:6px;padding:6px 4px;text-align:center;background:color-mix(in srgb,var(--c) 16%,transparent);transition:transform .15s}
+  .hcel.pico{border:2px solid var(--c);background:color-mix(in srgb,var(--c) 34%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 28%,transparent),0 0 16px color-mix(in srgb,var(--c) 45%,transparent);transform:translateY(-2px);z-index:1}
+  .hcel.pico .num{font-weight:700;color:var(--text)}
+  .hcel-et{position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--c);color:#0B0E12;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:999px;white-space:nowrap}
+  #h-calor{padding-top:8px}
+  .pico-dia{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border:1px solid var(--c);border-left:4px solid var(--c);border-radius:var(--radius-s);padding:6px 12px;background:color-mix(in srgb,var(--c) 10%,transparent)}
+  .pico-dia .pico-et{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700}
+  .pico-dia b{font-size:18px}
+  .pico-dia .num{font-size:18px;font-weight:700;color:var(--c)}
+  tr.fila-pico td{background:color-mix(in srgb,var(--gold) 10%,transparent);font-weight:700}
+  .tablewrap{overflow:auto;max-height:420px;border:1px solid var(--border);border-radius:var(--radius-m);margin-top:10px}
+  table.data{border-collapse:collapse;width:100%;font-size:13px}
+  table.data th,table.data td{padding:7px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border)}
+  table.data th:first-child,table.data td:first-child{text-align:left}
+  table.data thead th{position:sticky;top:0;background:var(--surface-alt);color:var(--text-muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;z-index:1}
+  table.data tbody tr:hover{background:var(--surface-alt)}
+  .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid var(--border-strong);color:var(--text-muted)}
+  .tag.r{color:var(--brand-bright);border-color:var(--brand)}
+  .tag.f{color:var(--gold);border-color:var(--chart-pred)}
+  .z1{color:var(--good)} .z2c{color:var(--warn)} .z3c{color:var(--text-muted)}
+  .neg{color:var(--crit)} .pos{color:var(--good)}
+  .about{display:grid;grid-template-columns:repeat(2,1fr);gap:18px 28px;margin-top:8px}
+  @media (max-width:900px){.about{grid-template-columns:1fr}}
+  .about p,.about li{color:var(--text-muted);font-size:13px;margin:4px 0}
+  .about ul{margin:4px 0 0;padding-left:18px}
+  .status{display:flex;gap:10px;flex-wrap:wrap}
+  .pill{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 12px;font-size:12px;color:var(--text-muted)}
+  .pill b{color:var(--text)}
+  footer{color:var(--text-muted);font-size:11.5px;text-align:center;padding-top:8px}
+  #err{display:none;background:#3a1010;color:#ffb4b0;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:12px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <svg id="wave" viewBox="0 0 1200 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+    <div class="brandbar">
+      <img id="logo-tcs" alt="Tata Consultancy Services" src="{{LOGO_TCS}}">
+      <div class="brandright">
+        <div class="viewtoggle" role="group" aria-label="Vista de color">
+          <button id="btn-color" class="active" type="button" title="Vista a color" aria-label="Vista a color"><span class="ic-color"></span></button>
+          <button id="btn-bw" type="button" title="Vista blanco y negro" aria-label="Vista blanco y negro"><span class="ic-bw"></span></button>
+        </div>
+        <img id="logo-tata" alt="TATA" src="{{LOGO_TATA}}">
+      </div>
+    </div>
+    <h1>BaNCS Forecast</h1>
+    <p class="subtitle">Pronóstico de transacciones, colas, procesos críticos y reposting</p>
+  </header>
+  <div id="err"></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="active" data-tab="tph" role="tab" type="button">TXN Financieras y No Financieras</button>
+    <button data-tab="colas" role="tab" type="button">Colas</button>
+    <button data-tab="proc" role="tab" type="button">Procesos Críticos</button>
+    <button data-tab="rep" role="tab" type="button">Reposting</button>
+  </nav>
+
+  <!-- =========================== TPH =========================== -->
+  <section class="tabpanel active" id="tab-tph">
+    <section class="panel controls">
+      <div class="row between">
+        <div class="segbar" id="tph-serie">
+          <button data-v="tot" class="active" type="button">Ambas</button>
+          <button data-v="fin" type="button">Transacciones Financieras</button>
+          <button data-v="nofin" type="button">Transacciones No Financieras</button>
+        </div>
+        <div class="segbar" id="tph-res">
+          <button data-v="hora" class="active" type="button">Por hora</button>
+          <button data-v="dia" type="button">Por día</button>
+        </div>
+      </div>
+      <div class="row between">
+        <div class="segbar" id="tph-rango">
+          <button data-n="1" type="button">1D</button><button data-n="3" type="button">3D</button>
+          <button data-n="7" class="active" type="button">1S</button><button data-n="14" type="button">2S</button>
+          <button data-n="30" type="button">1M</button><button data-n="90" type="button">3M</button>
+          <button data-n="365" type="button">1A</button><button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="tph-desde">Desde</label><input type="date" id="tph-desde"></div>
+          <div class="field"><label for="tph-hasta">Hasta</label><input type="date" id="tph-hasta"></div>
+        </div>
+      </div>
+    </section>
+    <section class="kpis" id="tph-kpis"></section>
+    <section class="kpis picos" id="tph-picos"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2 id="tph-titulo">TPH</h2><span class="small" id="tph-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Transacciones por hora o por día en el período seleccionado. La línea continua corresponde a datos reales y la punteada al pronóstico, acompañado de su rango probable (10–90%).</p>
+      <div id="tph-chart" class="chart-area" style="height:430px"></div>
+      <div class="legend-note" id="tph-leyenda">
+        <span><i class="swatch hist"></i> Real</span>
+        <span><i class="swatch pred"></i> Pronóstico (mediana)</span>
+        <span><i class="swatch band"></i> Banda 10–90%</span>
+        <span><i class="swatch cut"></i> Último dato real</span>
+        <span><i class="swatch z2"></i> Días 91–180: zona intermedia</span>
+        <span><i class="swatch z3"></i> Días 181–365: zona indicativa</span>
+      </div>
+      <p class="note" id="tph-nota"></p>
+    </section>
+
+    <section class="panel panel-pad">
+      <h2>Resumen por día</h2>
+      <p class="lead">Detalle diario del período seleccionado: valor real en los días transcurridos y pronóstico con su rango probable en los siguientes. En la vista «Ambas» se desglosa por tipo de transacción.</p>
+      <div class="tablewrap"><table class="data" id="tph-tabla-dias"></table></div>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <h2>Mapa de calor día × hora</h2>
+      <p class="lead">Distribución del volumen por día y hora; los tonos más claros indican mayor cantidad de transacciones. Se muestran hasta 60 días.</p>
+      <div id="tph-chart-heat" class="chart-area" style="height:420px"></div>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <h2>Comparar un instante con los siguientes días del mismo tipo</h2>
+      <p class="lead">Compara una hora de un día con la misma hora en los cuatro siguientes días del mismo tipo: el mismo día de la semana (día normal), el primer día laboral o el fin de semana de cada semana siguiente, el primer día hábil, el último día hábil o la quincena de los meses siguientes, o los feriados que siguen. Si el día elegido no es del tipo, la base pasa al primero de ese tipo. TPH son transacciones por hora y TPS, transacciones por segundo.</p>
+      <div class="row" style="margin-top:12px">
+        <div class="field"><label for="cmp-tipo">Tipo de día</label><select id="cmp-tipo"></select></div>
+        <div class="field" id="cmp-finde-f"><label for="cmp-finde">Días del fin de semana</label><select id="cmp-finde"><option value="ambos">Sábado y domingo</option><option value="sab">Solo sábados</option><option value="dom">Solo domingos</option></select></div>
+        <div class="field"><label for="cmp-fecha">Día</label><input type="date" id="cmp-fecha"></div>
+        <div class="field"><label for="cmp-hora">Hora</label><select id="cmp-hora"></select></div>
+      </div>
+      <p class="note" id="cmp-nota"></p>
+      <div class="tablewrap"><table class="data" id="tph-tabla-cmp"></table></div>
+      <div id="tph-chart-cmp" class="chart-area" style="height:340px;min-height:300px;margin-top:12px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (barra = banda 10–90%)</span><span>- - - Valor del día base</span></div>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <h2>Perfil horario comparado</h2>
+      <p class="lead">Comportamiento hora a hora del día seleccionado frente al mismo día de la semana en las cuatro semanas previas y su promedio.</p>
+      <div class="row" style="margin-top:12px"><div class="field"><label for="perf-fecha">Día</label><input type="date" id="perf-fecha"></div></div>
+      <div id="tph-chart-perf" class="chart-area" style="height:380px;margin-top:8px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Día elegido (azul si es real, dorado si es pronóstico)</span><span><i class="swatch" style="border-color:#7B8794"></i> Mismo día de las 4 semanas anteriores</span><span><i class="swatch" style="border-top:2px dashed #C9D1D9"></i> Promedio de esas 4 semanas</span></div>
+    </section>
+
+    <section class="panel panel-pad">
+      <h2>Cómo leer este pronóstico</h2>
+      <div class="about" id="tph-about"></div>
+    </section>
+  </section>
+
+  <!-- =========================== PROCESOS =========================== -->
+  <section class="tabpanel" id="tab-proc">
+    <!-- ---------- Bloque 1: evolución en un período ---------- -->
+    <section class="panel controls bloque">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag r">Período</span><h2>Evolución en un período</h2></div>
+        <span class="small" id="p-periodo-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Todos los gráficos de este bloque muestran el período elegido aquí. Haga clic en un día de cualquiera de ellos para ver el detalle de esa noche en el bloque inferior.</p>
+      <div class="row between">
+        <div class="segbar" id="p-rango">
+          <button data-n="30" type="button">1M</button><button data-n="90" type="button">3M</button>
+          <button data-n="180" class="active" type="button">6M</button><button data-n="365" type="button">1A</button>
+          <button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="p-desde">Desde</label><input type="date" id="p-desde"></div>
+          <div class="field"><label for="p-hasta">Hasta</label><input type="date" id="p-hasta"></div>
+        </div>
+      </div>
+    </section>
+    <section class="kpis" id="p-kpis-conta"></section>
+    <section class="kpis picos" id="p-picos"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Duración de todos los procesos por día</h2><span class="small" id="p-gen-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Duración diaria de cada subproceso del batch nocturno, real y pronosticada.</p>
+      <div id="p-gen" class="chart-area" style="height:340px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Línea continua = real</span><span><i class="swatch pred"></i> Línea punteada = pronóstico</span><span><i class="swatch cut"></i> Último dato real</span><span><i class="swatch" style="border-top:2px solid #F2B233"></i> Noche seleccionada</span></div>
+    </section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Registros contables por día</h2><span class="small" id="p-reg-sub"></span></div>
+      <div id="p-reg" class="chart-area" style="height:340px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico</span><span><i class="swatch band"></i> Banda 10–90%</span><span><i class="swatch" style="border-top:2px solid #F2B233"></i> Noche seleccionada</span></div>
+      <p class="note">Registros procesados por cfpd0111cm, equivalentes a unas 3,1 veces las transacciones financieras del día. Desde junio de 2026 el primer día hábil ya no duplica el volumen.</p>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2>Resumen por día</h2><span class="small" id="p-tabla-sub"></span></div>
+      <p class="lead">Duración de cada subproceso (en minutos) y registros contables (en millones) por día de negocio: valor real en los días ejecutados y pronóstico en los siguientes. Haga clic en una fila para ver esa noche.</p>
+      <div class="tablewrap"><table class="data" id="p-tabla-dias"></table></div>
+    </section>
+
+    <section class="panel controls bloque-sub">
+      <div class="row between">
+        <div class="field"><label for="p-sub">Subproceso</label><select id="p-sub"></select></div>
+        <span class="small">Aplica al gráfico siguiente · mismo período del bloque</span>
+      </div>
+    </section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2 id="p-dur-titulo">Duración por día</h2><span class="small" id="p-dur-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Evolución de la duración del subproceso seleccionado, con su rango probable en los días pronosticados.</p>
+      <div id="p-dur" class="chart-area" style="height:380px"></div>
+      <div class="legend-note">
+        <span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (mediana)</span><span><i class="swatch band"></i> Banda 10–90%</span>
+        <span><i class="swatch cut"></i> Último dato real</span><span><i class="swatch" style="border-top:2px solid #F2B233"></i> Noche seleccionada</span>
+        <span><i class="swatch z2"></i> Días 91–180</span><span><i class="swatch z3"></i> Días 181–365</span>
+      </div>
+      <p class="note" id="p-dur-nota"></p>
+    </section>
+
+    <!-- ---------- Bloque 2: detalle de una noche ---------- -->
+    <section class="panel controls bloque dia" id="p-noche">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag f">Día</span><h2>Detalle de una noche de batch</h2></div>
+        <span class="small" id="p-noche-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Las tarjetas y los gráficos de este bloque muestran solo la noche elegida aquí. También puede elegirla haciendo clic en un día del bloque superior.</p>
+      <div class="row">
+        <div class="field"><label for="p-fecha">Día de negocio</label><input type="date" id="p-fecha"></div>
+        <button class="btn" id="p-prev" type="button">&larr; anterior</button>
+        <button class="btn" id="p-next" type="button">siguiente &rarr;</button>
+      </div>
+    </section>
+    <section class="kpis" id="p-kpis"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2 id="p-gantt-titulo">Línea de tiempo de la noche</h2><span class="small" id="p-gantt-sub"></span></div>
+      <div class="row" id="p-gantt-ctl" style="display:none;margin-bottom:6px"><div class="field"><label for="p-gantt-h">Pronóstico hecho</label><select id="p-gantt-h"><option value="1">1 día antes</option><option value="7" selected>7 días antes</option><option value="30">30 días antes</option><option value="90">90 días antes</option></select></div></div>
+      <div id="p-gantt" class="chart-area" style="height:380px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (el rango 10–90% del inicio aparece al pasar el cursor)</span></div>
+      <p class="note">Secuencia de ejecución del batch en la noche seleccionada. Los subprocesos corren en cadena: cada uno inicia al finalizar el anterior, salvo bncd0801, que tiene inicio propio. bnccrn2dcm dura unos segundos: su barra se dibuja con un ancho mínimo y la duración real aparece al pasar el cursor.</p>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <div class="chartcard-head"><h2>Comparar la noche con las siguientes del mismo tipo</h2><span class="small" id="p-cmp-sub"></span></div>
+      <div class="row" style="margin-top:12px"><div class="field"><label for="p-cmp-tipo">Tipo de día</label><select id="p-cmp-tipo"></select></div><div class="field"><label for="p-cmp-s">Subproceso</label><select id="p-cmp-s"></select></div></div>
+      <p class="lead" style="margin-top:8px">Compara el subproceso seleccionado en la noche elegida con las cuatro siguientes noches del mismo tipo: el mismo día de la semana (día normal), el primer día laboral de cada semana siguiente, o el primer día hábil, el último día hábil o la quincena de los meses siguientes. Feriados y fines de semana no se pueden elegir porque esos días no hay batch.</p>
+      <p class="note" id="p-cmp-nota"></p>
+      <div class="tablewrap"><table class="data" id="p-tabla-cmp"></table></div>
+      <div id="p-chart-cmp" class="chart-area" style="height:330px;min-height:300px;margin-top:12px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (barra = banda 10–90%)</span><span>- - - Valor del día base</span></div>
+    </section>
+
+    <section class="panel panel-pad">
+      <h2>Cómo leer este pronóstico</h2>
+      <div class="about" id="p-about"></div>
+    </section>
+  </section>
+
+  <!-- =========================== COLAS =========================== -->
+  <section class="tabpanel" id="tab-colas">
+    <!-- ---------- Bloque 1: panorama de todas las colas ---------- -->
+    <section class="panel controls bloque">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag r">Todas las colas</span><h2>Panorama de todas las colas</h2></div>
+        <span class="small" id="cp-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Los gráficos y tablas de este bloque muestran todas las colas en el período elegido aquí. Seleccione una fila para ver esa cola en detalle o simular sus hilos.</p>
+      <div class="row between">
+        <div class="segbar" id="cp-rango">
+          <button data-n="7" type="button">1S</button><button data-n="14" type="button">2S</button>
+          <button data-n="30" type="button">1M</button><button data-n="90" class="active" type="button">3M</button>
+          <button data-n="180" type="button">6M</button><button data-n="365" type="button">1A</button><button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="cp-desde">Desde</label><input type="date" id="cp-desde"></div>
+          <div class="field"><label for="cp-hasta">Hasta</label><input type="date" id="cp-hasta"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Reparto del volumen diario por familia de colas</h2><span class="small" id="c-comp-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Distribución del volumen diario entre las familias de colas. La suma de todas las colas coincide con el total de la pestaña TXN Financieras y No Financieras.</p>
+      <div id="c-comp" class="chart-area" style="height:360px"></div>
+      <div class="legend-note" id="c-comp-leg"></div>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2>Todas las colas: volumen y pico del período</h2><span class="small" id="c-tabla-colas-sub"></span></div>
+      <p class="lead">Resumen del período por cola: volumen promedio, participación en el total y hora de mayor carga. El pico usa el valor real en los días transcurridos y el valor alto del pronóstico (P90) en los siguientes, el mismo criterio con que se calculan los hilos. Seleccione una fila para ver esa cola en detalle.</p>
+      <div class="tablewrap" style="max-height:560px"><table class="data" id="c-tabla-colas"></table></div>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2>Hilos por cola: carga y margen</h2><span class="small" id="h-tabla-sub"></span></div>
+      <p class="lead">Compara los hilos activos de cada cola (máximo 99) con los requeridos en su hora de mayor demanda del período. El criterio P90 cubre el 90% de los momentos y el máximo, el instante de mayor carga. Seleccione una fila para simular esa cola.</p>
+      <div class="tablewrap" style="max-height:560px"><table class="data" id="h-tabla"></table></div>
+      <p class="note" id="h-tabla-nota"></p>
+    </section>
+
+    <!-- ---------- Bloque 2: detalle de una cola ---------- -->
+    <section class="panel controls bloque cola" id="c-bloque-cola">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag" style="color:#8FB6C9;border-color:#8FB6C9">Una cola</span><h2>Detalle de una cola</h2></div>
+        <span class="small" id="c-cola-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Las tarjetas, gráficos y tablas de este bloque muestran solo la cola y el período elegidos aquí. La cola es la misma del simulador de hilos.</p>
+      <div class="row between">
+        <div class="field"><label for="c-cola">Cola</label><select id="c-cola"></select></div>
+        <div class="segbar" id="c-res">
+          <button data-v="hora" type="button">Por hora</button>
+          <button data-v="dia" class="active" type="button">Por día</button>
+        </div>
+      </div>
+      <div class="row between">
+        <div class="segbar" id="c-rango">
+          <button data-n="7" type="button">1S</button><button data-n="14" type="button">2S</button>
+          <button data-n="30" type="button">1M</button><button data-n="90" class="active" type="button">3M</button>
+          <button data-n="180" type="button">6M</button><button data-n="365" type="button">1A</button><button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="c-desde">Desde</label><input type="date" id="c-desde"></div>
+          <div class="field"><label for="c-hasta">Hasta</label><input type="date" id="c-hasta"></div>
+        </div>
+      </div>
+    </section>
+    <section class="kpis" id="c-kpis"></section>
+    <section class="kpis picos" id="c-picos"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2 id="c-titulo">Cola</h2><span class="small" id="c-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Transacciones de la cola seleccionada, reales y pronosticadas. Las líneas naranjas punteadas señalan cambios de enrutamiento entre colas. Haga clic en un día para ver su perfil horario.</p>
+      <div id="c-chart" class="chart-area" style="height:430px"></div>
+      <div class="legend-note">
+        <span><i class="swatch hist"></i> Real</span>
+        <span><i class="swatch pred"></i> Pronóstico (mediana)</span>
+        <span><i class="swatch band"></i> Banda 10–90%</span>
+        <span><i class="swatch cut"></i> Último dato real</span>
+        <span><i class="swatch" style="border-top:2px dotted #F08C3A"></i> Cambio de enrutamiento</span>
+        <span><i class="swatch z2"></i> Días 91–180</span>
+        <span><i class="swatch z3"></i> Días 181–365</span>
+      </div>
+      <p class="note" id="c-nota"></p>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2 id="c-tabla-dias-tit">Resumen por día</h2><span class="small" id="c-tabla-dias-sub"></span></div>
+      <p class="lead">Total y hora de mayor carga por día para la cola seleccionada: valor real en los días transcurridos y pronóstico con su rango probable en los siguientes.</p>
+      <div class="tablewrap"><table class="data" id="c-tabla-dias"></table></div>
+    </section>
+
+    <section class="panel panel-pad charts" id="c-perf-card">
+      <div class="chartcard-head"><div class="bloque-tit"><span class="tag f">Día</span><h2 id="c-perf-tit">Perfil horario comparado</h2></div><span class="small" id="c-perf-sub"></span></div>
+      <p class="lead">Comportamiento hora a hora del día seleccionado frente al mismo día de la semana en las cuatro semanas previas. Disponible para todos los días reales y los primeros 90 pronosticados.</p>
+      <div class="row" style="margin-top:12px"><div class="field"><label for="c-perf-fecha">Día</label><input type="date" id="c-perf-fecha"></div></div>
+      <div id="c-chart-perf" class="chart-area" style="height:380px;margin-top:8px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Día elegido (azul si es real, dorado si es pronóstico)</span><span><i class="swatch" style="border-color:#7B8794"></i> Mismo día de las 4 semanas anteriores</span><span><i class="swatch" style="border-top:2px dashed #C9D1D9"></i> Promedio de esas 4 semanas</span></div>
+    </section>
+
+    <section class="panel panel-pad charts" id="c-cmp-card">
+      <div class="chartcard-head"><div class="bloque-tit"><span class="tag f">Día</span><h2 id="c-cmp-tit">Comparar un instante con los siguientes días del mismo tipo</h2></div><span class="small" id="c-cmp-sub"></span></div>
+      <p class="lead">Compara la cola seleccionada a una hora de un día con la misma hora en los cuatro siguientes días del mismo tipo: el mismo día de la semana (día normal), el primer día laboral o el fin de semana de cada semana siguiente, el primer día hábil, el último día hábil o la quincena de los meses siguientes, o los feriados que siguen. Si el día elegido no es del tipo, la base pasa al primero de ese tipo. El valor por hora existe para todos los días reales y los primeros 90 pronosticados; más allá se compara solo el total del día.</p>
+      <div class="row" style="margin-top:12px">
+        <div class="field"><label for="c-cmp-tipo">Tipo de día</label><select id="c-cmp-tipo"></select></div>
+        <div class="field" id="c-cmp-finde-f"><label for="c-cmp-finde">Días del fin de semana</label><select id="c-cmp-finde"><option value="ambos">Sábado y domingo</option><option value="sab">Solo sábados</option><option value="dom">Solo domingos</option></select></div>
+        <div class="field"><label for="c-cmp-fecha">Día</label><input type="date" id="c-cmp-fecha"></div>
+        <div class="field"><label for="c-cmp-hora">Hora</label><select id="c-cmp-hora"></select></div>
+      </div>
+      <p class="note" id="c-cmp-nota"></p>
+      <div class="tablewrap"><table class="data" id="c-tabla-cmp"></table></div>
+      <div id="c-chart-cmp" class="chart-area" style="height:340px;min-height:300px;margin-top:12px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (barra = banda 10–90%)</span><span>- - - Valor del día base</span></div>
+    </section>
+
+    <!-- ---------- Bloque 3: simulador de hilos ---------- -->
+    <section class="panel controls bloque sim" id="h-bloque">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag f">Herramienta</span><h2 id="h-titulo">Simulador de hilos</h2><span id="h-modo"></span></div>
+        <span class="small" id="h-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Calcula los hilos necesarios hora a hora con la demanda real (días transcurridos) o con el valor alto del pronóstico (días siguientes). Tiene su propio período (por defecto, los 90 días desde hoy; también los 30 o 90 días anteriores a hoy, o las fechas que elija) y comparte la cola con el bloque anterior. Se recomienda que ninguna hora supere el 80% de utilización.</p>
+      <div class="row between">
+        <div class="field"><label for="h-cola">Cola</label><select id="h-cola"></select></div>
+        <div class="row">
+          <div class="segbar" id="h-rango">
+            <button data-n="-90" type="button">Últ. 90 d</button><button data-n="-30" type="button">Últ. 30 d</button>
+            <button data-n="30" type="button">Próx. 30 d</button><button data-n="90" class="active" type="button">Próx. 90 d</button>
+            <button data-n="180" type="button">Próx. 180 d</button><button data-n="365" type="button">Próx. 1 año</button>
+          </div>
+          <div class="field"><label for="h-desde">Desde</label><input type="date" id="h-desde"></div>
+          <div class="field"><label for="h-hasta">Hasta</label><input type="date" id="h-hasta"></div>
+        </div>
+      </div>
+      <div class="row" style="gap:12px 18px">
+        <div class="field"><label for="h-extra">Aumento de demanda %</label><input type="number" id="h-extra" value="0" step="5" style="width:84px"></div>
+        <div class="field"><label for="h-hilos">Hilos simulados</label><input type="number" id="h-hilos" min="1" max="99" step="1" style="width:76px"></div>
+        <div class="field"><label for="h-margen">Margen %</label><input type="number" id="h-margen" value="0" min="0" step="5" style="width:76px"></div>
+        <div class="field"><label for="h-w">Tiempo por transacción (ms)</label><input type="number" id="h-w" min="1" step="5" placeholder="automático" style="width:112px"></div>
+        <div class="field"><label for="h-crit">Criterio</label><select id="h-crit"><option value="p90">Concurrencia P90</option><option value="max">Concurrencia máxima observada</option></select></div>
+        <button class="btn" id="h-reset" type="button">Restablecer</button>
+      </div>
+    </section>
+    <section class="kpis" id="h-kpis"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Hilos requeridos por día</h2><span class="small" id="h-chart-sub"></span></div>
+      <div id="h-chart" class="chart-area" style="height:340px"></div>
+      <div class="legend-note">
+        <span><i class="swatch hist"></i> Hilos requeridos con demanda real</span>
+        <span><i class="swatch pred"></i> Con el techo del pronóstico</span>
+        <span><i class="swatch" style="border-top:2px dashed #F4F6F8"></i> Hilos simulados</span>
+        <span><i class="swatch" style="border-top:2px solid #E5625E"></i> Máximo por cola (99)</span>
+      </div>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <div class="chartcard-head"><div class="bloque-tit"><span class="tag f">Día</span><h2>Detalle por hora</h2></div><span class="small" id="h-dia-sub"></span></div>
+      <p class="lead">Utilización de los hilos simulados en cada hora del día elegido. La hora que exige más hilos queda resaltada. Puede elegir cualquier día real o de los primeros 90 pronosticados, o hacer clic en un día del gráfico de arriba.</p>
+      <div class="row between" style="margin-top:8px"><div class="field"><label for="h-dia">Día</label><input type="date" id="h-dia"></div><div id="h-pico"></div></div>
+      <div id="h-calor" style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin-top:10px"></div>
+      <div class="legend-note" id="h-leyenda" style="margin-top:8px"></div>
+      <div class="tablewrap"><table class="data" id="h-tabla-horas"></table></div>
+      <p class="note" id="h-nota"></p>
+    </section>
+
+    <section class="panel panel-pad">
+      <h2>Cómo leer este pronóstico</h2>
+      <div class="about" id="c-about"></div>
+    </section>
+  </section>
+
+  <!-- =========================== REPOSTING =========================== -->
+  <section class="tabpanel" id="tab-rep">
+    <!-- ---------- Bloque 1: panorama de la noche de reposting ---------- -->
+    <section class="panel controls bloque">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag r">Todas las tablas</span><h2>Panorama de la noche de reposting</h2></div>
+        <span class="small" id="rp-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Las tarjetas, gráficos y tablas de este bloque muestran todas las tablas en el período elegido aquí. El reposting del día de negocio D corre en la madrugada de D+1; solo hay datos y pronóstico para días hábiles. Seleccione una fila de la tabla para ver esa tabla en detalle.</p>
+      <div class="row between">
+        <div class="segbar" id="rp-rango">
+          <button data-n="14" type="button">2S</button><button data-n="30" type="button">1M</button>
+          <button data-n="90" class="active" type="button">3M</button><button data-n="180" type="button">6M</button>
+          <button data-n="365" type="button">1A</button><button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="rp-desde">Desde</label><input type="date" id="rp-desde"></div>
+          <div class="field"><label for="rp-hasta">Hasta</label><input type="date" id="rp-hasta"></div>
+        </div>
+      </div>
+    </section>
+    <section class="kpis" id="rp-kpis"></section>
+    <section class="kpis picos" id="rp-picos"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Transacciones por noche, por tabla</h2><span class="small" id="rp-stack-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Volumen de cada noche repartido entre las tablas activas: color pleno en los días reales, tenue en los pronosticados.</p>
+      <div id="rp-stack" class="chart-area" style="height:380px"></div>
+      <div class="legend-note" id="rp-stack-leg"></div>
+    </section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2>Duración de la noche</h2><span class="small" id="rp-noche-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px">Todas las tablas arrancan a la vez, así que la noche dura lo que tarda la tabla más lenta (casi siempre IMG7). En los días pronosticados la duración es volumen ÷ ratio.</p>
+      <div id="rp-noche" class="chart-area" style="height:380px"></div>
+      <div class="legend-note">
+        <span><i class="swatch hist"></i> Real</span>
+        <span><i class="swatch pred"></i> Pronóstico (mediana)</span>
+        <span><i class="swatch band"></i> Banda 10–90%</span>
+        <span><i class="swatch cut"></i> Último dato real</span>
+        <span><i class="swatch" style="border-top:2px dashed #E5625E"></i> Noche más larga del historial</span>
+        <span><i class="swatch z2"></i> Días 91–180</span>
+        <span><i class="swatch z3"></i> Días 181–365</span>
+      </div>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2>Todas las tablas: volumen, ratio y tiempo del período</h2><span class="small" id="rp-tabla-sub"></span></div>
+      <p class="lead">Promedio por noche de cada tabla en el período, su parte del volumen, y la variación frente a las mismas fechas del año anterior. Las tablas sin actividad se listan al final. Seleccione una fila para ver esa tabla en detalle.</p>
+      <div class="tablewrap"><table class="data" id="rp-tabla"></table></div>
+    </section>
+
+    <!-- ---------- Bloque 2: detalle de una tabla ---------- -->
+    <section class="panel controls bloque cola" id="rd-bloque">
+      <div class="row between">
+        <div class="bloque-tit"><span class="tag" style="color:#8FB6C9;border-color:#8FB6C9">Una tabla</span><h2>Detalle de una tabla</h2></div>
+        <span class="small" id="rd-txt"></span>
+      </div>
+      <p class="lead" style="margin:0">Las tarjetas, gráficos y tablas de este bloque muestran solo la tabla y el período elegidos aquí.</p>
+      <div class="row between">
+        <div class="field"><label for="rd-tabla">Tabla</label><select id="rd-tabla"></select></div>
+        <div class="segbar" id="rd-met">
+          <button data-v="trx" class="active" type="button">Volumen (TRX)</button>
+          <button data-v="tmin" type="button">Tiempo (min)</button>
+          <button data-v="ratio" type="button">Ratio (TRX/min)</button>
+        </div>
+      </div>
+      <div class="row between">
+        <div class="segbar" id="rd-rango">
+          <button data-n="14" type="button">2S</button><button data-n="30" type="button">1M</button>
+          <button data-n="90" class="active" type="button">3M</button><button data-n="180" type="button">6M</button>
+          <button data-n="365" type="button">1A</button><button data-n="all" type="button">Todo</button>
+        </div>
+        <div class="row">
+          <div class="field"><label for="rd-desde">Desde</label><input type="date" id="rd-desde"></div>
+          <div class="field"><label for="rd-hasta">Hasta</label><input type="date" id="rd-hasta"></div>
+        </div>
+      </div>
+    </section>
+    <section class="kpis" id="rd-kpis"></section>
+    <section class="kpis picos" id="rd-picos"></section>
+
+    <section class="panel chartcard charts">
+      <div class="chartcard-head"><h2 id="rd-titulo">Tabla</h2><span class="small" id="rd-sub"></span></div>
+      <p class="lead" style="margin:0 0 6px" id="rd-lead"></p>
+      <div id="rd-chart" class="chart-area" style="height:430px"></div>
+      <div class="legend-note">
+        <span><i class="swatch hist"></i> Real</span>
+        <span><i class="swatch pred"></i> Pronóstico (mediana)</span>
+        <span><i class="swatch band"></i> Banda 10–90%</span>
+        <span><i class="swatch cut"></i> Último dato real</span>
+        <span><i class="swatch" style="border-top:2px dotted #F08C3A"></i> Cambio de nivel</span>
+        <span><i class="swatch z2"></i> Días 91–180</span>
+        <span><i class="swatch z3"></i> Días 181–365</span>
+      </div>
+      <p class="note" id="rd-nota"></p>
+    </section>
+
+    <section class="panel panel-pad">
+      <div class="chartcard-head"><h2 id="rd-dias-tit">Resumen por día</h2><span class="small" id="rd-dias-sub"></span></div>
+      <p class="lead">Volumen, tiempo y ratio de cada noche para la tabla seleccionada: valor real en los días transcurridos y pronóstico con su rango probable en los siguientes.</p>
+      <div class="tablewrap"><table class="data" id="rd-dias"></table></div>
+    </section>
+
+    <section class="panel panel-pad charts">
+      <div class="chartcard-head"><div class="bloque-tit"><span class="tag f">Día</span><h2 id="rd-cmp-tit">Comparar una noche con las siguientes del mismo tipo</h2></div><span class="small" id="rd-cmp-sub"></span></div>
+      <p class="lead">Compara la tabla seleccionada en un día de negocio con los cuatro siguientes del mismo tipo: el mismo día de la semana (día normal), el primer día laboral o el primer batch de cada semana siguiente, o el primer día hábil, el último día hábil o la quincena de los meses siguientes. Si el día elegido no es del tipo, la base pasa al primero de ese tipo. No hay fin de semana ni feriado porque esos días no corre el reposting.</p>
+      <div class="row" style="margin-top:12px">
+        <div class="field"><label for="rd-cmp-tipo">Tipo de día</label><select id="rd-cmp-tipo"></select></div>
+        <div class="field"><label for="rd-cmp-fecha">Día de negocio</label><input type="date" id="rd-cmp-fecha"></div>
+      </div>
+      <p class="note" id="rd-cmp-nota"></p>
+      <div class="tablewrap"><table class="data" id="rd-tabla-cmp"></table></div>
+      <div id="rd-chart-cmp" class="chart-area" style="height:340px;min-height:300px;margin-top:12px"></div>
+      <div class="legend-note"><span><i class="swatch hist"></i> Real</span><span><i class="swatch pred"></i> Pronóstico (barra = banda 10–90%)</span><span>- - - Valor del día base</span></div>
+    </section>
+
+    <section class="panel panel-pad">
+      <h2>Cómo leer este pronóstico</h2>
+      <div class="about" id="r-about"></div>
+    </section>
+  </section>
+
+  <footer>Generado <span id="generado"></span> &middot; TCS &middot; Los pronósticos son estimaciones con incertidumbre; ver «Cómo leer este pronóstico».</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/4.1.0/plotly.min.js"></script>
+<script>
+(function(){
+"use strict";
+var errBox = document.getElementById('err');
+window.addEventListener('error', function(e){ errBox.style.display='block'; errBox.textContent += (e.message||e) + ' @' + (e.filename||'') + ':' + (e.lineno||'') + '\n'; });
+const DATA = {{DATA}};
+
+/* ===================== utilidades ===================== */
+const $ = id => document.getElementById(id);
+const DAY = 864e5, HR = 36e5;
+const DOWN = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const pdate = s => Date.parse(s + 'T00:00:00Z');
+const dstr = ms => new Date(ms).toISOString().slice(0,10);
+const tstr = ms => new Date(ms).toISOString().slice(0,16).replace('T',' ');
+const dow = ms => new Date(ms).getUTCDay();
+const nf0 = new Intl.NumberFormat('es-EC',{maximumFractionDigits:0});
+const nf1 = new Intl.NumberFormat('es-EC',{minimumFractionDigits:1,maximumFractionDigits:1});
+const fM = v => v==null ? '—' : nf1.format(v/1e6) + ' M';
+const fK = v => v==null ? '—' : nf0.format(v/1e3) + ' k';
+const fmin = v => v==null ? '—' : nf1.format(v) + ' min';
+const hhmm = m => { if(m==null) return '—'; const t=((Math.round(m)%1440)+1440)%1440; return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const BLUE='#3D8FE0', GOLD='#C28815', ORANGE='#F4F6F8', GRID='#1E252E', TXT='#9DA7B3', TXT2='#F4F6F8', SURF='#10141A';
+const BAND='rgba(194,136,21,0.22)', Z2='rgba(107,118,131,0.10)', Z3='rgba(107,118,131,0.20)';
+const NOMBRE_SERIE = {fin:'Financiero', nofin:'No Financiero', tot:'Total (Financiero + No Financiero)'};
+const LEYENDA_TPH = $('tph-leyenda').innerHTML;            // leyenda de las vistas de una sola serie
+const C_FIN='#d95926', C_NOFIN='#3D8FE0';                   // vista «Ambas»: color = serie; real pleno, pronóstico tenue
+const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const fDia = ms => { const d=new Date(ms); return d.getUTCDate()+'-'+MES[d.getUTCMonth()]+'-'+d.getUTCFullYear(); };
+const HZ = [1,7,30,90];
+const HGOLD = {1:'#F2B233',7:'#C28815',30:'#9C6C10',90:'#7A5410'}, HDASH = {1:'solid',7:'dash',30:'dot',90:'dashdot'};
+
+function baseLayout(extra){
+  const l = {paper_bgcolor:SURF, plot_bgcolor:SURF, font:{family:'Open Sans, sans-serif',color:TXT,size:12},
+    margin:{l:64,r:20,t:24,b:44}, hovermode:'x unified', showlegend:false,
+    hoverlabel:{bgcolor:'#17171C',bordercolor:'#363640',font:{color:TXT2,size:12}},
+    xaxis:{gridcolor:GRID,zeroline:false,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{gridcolor:GRID,zeroline:false,rangemode:'tozero',tickfont:{color:TXT}}};
+  return Object.assign(l, extra||{});
+}
+const CFG = {displayModeBar:false, responsive:true};
+function plot(id, traces, layout){ Plotly.react($(id), traces, layout, CFG); }
+
+/* ===================== zonas del pronóstico ===================== */
+const T = DATA.tph, PR = DATA.proc;
+const T0 = Date.parse(T.t0.replace(' ','T')+'Z');
+const NH = T.series.fin.hist.length, NF = T.series.fin.fc50.length;
+const F0 = T0 + NH*HR;                     // primer instante pronosticado
+const F0D = Math.floor(F0/DAY)*DAY;
+const FEND = F0 + NF*HR - HR;
+const CAL0 = pdate(T.cal_d0);
+const BT0 = Date.parse(T.back_t0.replace(' ','T')+'Z');
+const LAST_REAL_DAY = F0D - DAY;
+/* Los botones de período (1S, 1M, 3M…) cuentan desde hoy (fecha de quien abre el tablero) hacia adelante; «Todo» no cambia.
+   Si hoy queda tan cerca del final del pronóstico que el período no cabe, se corre hacia atrás. */
+const HOY = (()=>{ const t=new Date(); return Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()); })();
+const FIN_FC = F0D + 364*DAY;
+function desdeHoy(n){ n=+n; const a=Math.max(Math.min(HOY, FIN_FC-(n-1)*DAY), CAL0); return [a, a+(n-1)*DAY]; }
+function zonaDe(dayMs){ const k=Math.round((dayMs-F0D)/DAY)+1; return k<1?0:(k<=90?1:(k<=180?2:3)); }
+const ZNOM = ['Real','Confiable (1–90 d)','Intermedia (91–180 d)','Indicativa (181–365 d)'];
+const ZCLS = ['','z1','z2c','z3c'];
+function tramoDe(dayMs){ const k=Math.round((dayMs-F0D)/DAY)+1; return k<=30?'1-30':(k<=90?'31-90':(k<=180?'91-180':'181-365')); }
+function zoneShapes(x0,x1){
+  const sh=[], an=[];
+  const defs=[[F0D+90*DAY,F0D+180*DAY,Z2,'Zona intermedia'],[F0D+180*DAY,F0D+365*DAY+DAY,Z3,'Zona indicativa']];
+  defs.forEach(d=>{ if(d[1]>x0 && d[0]<x1){ sh.push({type:'rect',xref:'x',yref:'paper',x0:tstr(Math.max(d[0],x0)),x1:tstr(Math.min(d[1],x1)),y0:0,y1:1,fillcolor:d[2],line:{width:0},layer:'below'});
+    an.push({xref:'x',yref:'paper',x:tstr(Math.max(d[0],x0)),y:1.0,xanchor:'left',yanchor:'bottom',showarrow:false,text:d[3],font:{size:10,color:TXT}}); }});
+  if(F0>=x0 && F0<=x1) sh.push({type:'line',xref:'x',yref:'paper',x0:tstr(F0),x1:tstr(F0),y0:0,y1:1,line:{color:'#76757F',width:1.5,dash:'dash'}});
+  return {sh, an};
+}
+
+/* ===================== acceso a datos TPH ===================== */
+function isLab(d){ const i=Math.round((d-CAL0)/DAY); return T.lab[i]==='1'; }
+/* Tipo de día del calendario operativo del banco (una letra por día): N día normal, P primer día laboral,
+   B primer batch, S fin de semana, F feriado (incluye el sábado y domingo del bloque feriado). */
+const OPN = {N:'Día normal',P:'Primer día laboral',B:'Primer batch',S:'Fin de semana',F:'Feriado'};
+function opDe(d){ const i=Math.round((d-CAL0)/DAY); return (i>=0&&i<T.op.length)?T.op[i]:null; }
+function isFer(d){ return opDe(d)==='F'; }
+function tipoDia(d){ const c=opDe(d); return c?OPN[c]:'—'; }
+function batchHour(ms){ const h=new Date(ms).getUTCHours(); if(h===23||h<=1){ const d=Math.floor(ms/DAY)*DAY-(h===23?0:DAY); return isLab(d);} return false; }
+function hourVal(s, ms){
+  const i=Math.round((ms-T0)/HR), S=T.series[s];
+  if(i<0) return null;
+  if(i<NH){ const v=S.hist[i]; return v==null?null:{v:v,k:'r'}; }
+  const j=i-NH; if(j>=NF) return null; if(batchHour(ms)) return null;
+  return {v:S.fc50[j],lo:S.fc10[j],hi:S.fc90[j],k:'f'};
+}
+const dayCache = {};
+function dayVal(s, d){
+  const key=s+'|'+d; if(key in dayCache) return dayCache[key];
+  const S=T.series[s]; let sum=0, peak=-1, ph=-1, r=null;
+  if(d<F0D){
+    const i0=Math.round((d-T0)/HR); if(i0<0||i0+24>NH){ dayCache[key]=null; return null; }
+    let bad=false;
+    for(let h=0;h<24;h++){ const e=S.estado[i0+h], v=S.hist[i0+h]; if(e===2||e===3) bad=true; if(v!=null){ sum+=v; if(v>peak){peak=v;ph=h;} } }
+    r = bad?null:{v:sum,k:'r',peak:peak,ph:ph};
+  } else {
+    const j0=Math.round((d-F0)/HR); if(j0<0||j0+24>NF){ dayCache[key]=null; return null; }
+    for(let h=0;h<24;h++){ const v=S.fc50[j0+h]; if(batchHour(d+h*HR)) continue; sum+=v; if(v>peak){peak=v;ph=h;} }
+    const b=T.dia_banda[s][tramoDe(d)];
+    r={v:sum,k:'f',lo:sum*b[0],hi:sum*b[1],peak:peak,ph:ph};
+  }
+  dayCache[key]=r; return r;
+}
+
+/* ===================== estado de la pestaña TPH ===================== */
+const ST = {serie:'tot', res:'hora', desde:0, hasta:0};
+function setRango(n){
+  const dmax = F0D + 364*DAY;
+  if(n==='all'){ ST.desde=T0; ST.hasta=dmax; }
+  else [ST.desde, ST.hasta] = desdeHoy(n);
+  $('tph-desde').value=dstr(ST.desde); $('tph-hasta').value=dstr(ST.hasta);
+}
+function daysIn(a,b){ const out=[]; for(let d=Math.floor(a/DAY)*DAY; d<=b; d+=DAY) out.push(d); return out; }
+
+function renderTph(){
+  const s=ST.serie, nm=NOMBRE_SERIE[s];
+  const dias=daysIn(ST.desde,ST.hasta), nd=dias.length;
+  let res=ST.res;
+  const forzado = nd>90 && res==='hora';
+  if(forzado) res='dia';
+  $('tph-titulo').textContent = nm + (res==='hora'?' — TPH por hora':' — total diario');
+  $('tph-sub').textContent = dstr(ST.desde)+' a '+dstr(ST.hasta)+' · '+nd+' día'+(nd>1?'s':'');
+  $('tph-nota').textContent = forzado ? 'Con más de 90 días la vista se agrupa por día.' : '';
+  const x0=ST.desde, x1=ST.hasta+DAY;
+  const real={x:[],y:[]}, fc={x:[],y:[]}, lo={x:[],y:[]}, hi={x:[],y:[]};
+  const push=(o,x,y)=>{o.x.push(x);o.y.push(y);};
+  if(res==='hora'){
+    for(let ms=Math.floor(x0/HR)*HR; ms<x1; ms+=HR){
+      const v=hourVal(s,ms), x=tstr(ms);
+      if(v&&v.k==='r'){ push(real,x,v.v); push(fc,x,null); push(lo,x,null); push(hi,x,null); }
+      else if(v){ push(real,x,null); push(fc,x,v.v); push(lo,x,v.lo); push(hi,x,v.hi); }
+      else { push(real,x,null); push(fc,x,null); push(lo,x,null); push(hi,x,null); }
+    }
+  } else {
+    dias.forEach(d=>{ const v=dayVal(s,d), x=tstr(d+12*HR);
+      if(v&&v.k==='r'){ push(real,x,v.v); push(fc,x,null); push(lo,x,null); push(hi,x,null); }
+      else if(v){ push(real,x,null); push(fc,x,v.v); push(lo,x,v.lo); push(hi,x,v.hi); }
+      else { push(real,x,null); push(fc,x,null); push(lo,x,null); push(hi,x,null); } });
+  }
+  const z=zoneShapes(x0,x1);
+  const ann=z.an.slice();
+  if(s!=='fin'){
+    const a=pdate('2026-02-17'), b=pdate('2026-03-12');
+    if(b>x0 && a<x1) { z.sh.push({type:'rect',xref:'x',yref:'paper',x0:tstr(Math.max(a,x0)),x1:tstr(Math.min(b,x1)),y0:0,y1:1,fillcolor:'rgba(240,140,58,0.10)',line:{width:0},layer:'below'});
+      ann.push({xref:'x',yref:'paper',x:tstr(Math.max(a,x0)),y:0,xanchor:'left',yanchor:'bottom',showarrow:false,text:'Caída de nivel (feb–mar 2026)',font:{size:10,color:'#F08C3A'}}); }
+  }
+  { const P=PK.tph.series[s], k=res==='hora'?'tph':'dia_total', u=res==='hora'?' / h':'', w=res==='hora'?'Pico':'Día récord';
+    lineasPico(z.sh, ann, [[P.todo[k], 'Pico histórico: '+fM(P.todo[k])+u]].concat(s==='fin'?[]:[[P.desde[k], 'Pico actual: '+fM(P.desde[k])+u]])); }
+  let tr;
+  if(s==='tot'){
+    /* Áreas apiladas: Financiero abajo, No Financiero encima; el borde superior es el total. */
+    const A={fr:[],tr:[],nr:[],ff:[],tf:[],nf:[],lo:[],hi:[],x:[]};
+    const add=(x,f,n,t)=>{ A.x.push(x); const r=t&&t.k==='r', p=t&&t.k==='f', ok=t&&f&&n;
+      A.fr.push(ok&&r?f.v:null); A.tr.push(ok&&r?t.v:null); A.nr.push(ok&&r?n.v:null);
+      A.ff.push(ok&&p?f.v:null); A.tf.push(ok&&p?t.v:null); A.nf.push(ok&&p?n.v:null);
+      A.lo.push(ok&&p?t.lo:null); A.hi.push(ok&&p?t.hi:null); };
+    if(res==='hora'){ for(let ms=Math.floor(x0/HR)*HR; ms<x1; ms+=HR) add(tstr(ms),hourVal('fin',ms),hourVal('nofin',ms),hourVal('tot',ms)); }
+    else dias.forEach(d=>add(tstr(d+12*HR),dayVal('fin',d),dayVal('nofin',d),dayVal('tot',d)));
+    const capa=(y,fill,color,alpha,dash,extra)=>Object.assign({x:A.x,y:y,mode:'lines',connectgaps:false,fill:fill,fillcolor:color.replace('#','').match(/../g).reduce((a,h,i)=>a+(i?',':'')+parseInt(h,16),'rgba(')+','+alpha+')',line:{color:color,width:1.2,dash:dash}},extra);
+    tr=[
+      capa(A.fr,'tozeroy',C_FIN,0.55,'solid',{name:'Financiero',hovertemplate:'Financiero %{y:,.0f}<extra>real</extra>'}),
+      capa(A.tr,'tonexty',C_NOFIN,0.55,'solid',{name:'Total',customdata:A.nr,hovertemplate:'No Financiero %{customdata:,.0f}<br><b>Total %{y:,.0f}</b><extra>real</extra>'}),
+      capa(A.ff,'tozeroy',C_FIN,0.22,'dot',{name:'Financiero',hovertemplate:'Financiero %{y:,.0f}<extra>pronóstico</extra>'}),
+      capa(A.tf,'tonexty',C_NOFIN,0.22,'dot',{name:'Total',customdata:A.nf,hovertemplate:'No Financiero %{customdata:,.0f}<br><b>Total %{y:,.0f}</b><extra>pronóstico</extra>'}),
+      {x:A.x,y:A.lo,mode:'lines',connectgaps:false,line:{color:GOLD,width:1.2,dash:'dash'},name:'Total P10',hovertemplate:'Banda del total: %{y:,.0f}<extra>P10</extra>'},
+      {x:A.x,y:A.hi,mode:'lines',connectgaps:false,line:{color:GOLD,width:1.2,dash:'dash'},name:'Total P90',hovertemplate:'Banda del total: %{y:,.0f}<extra>P90</extra>'}
+    ];
+    $('tph-leyenda').innerHTML='<span><i class="swatch" style="height:10px;width:14px;border:none;background:'+C_FIN+'"></i> Financiero</span><span><i class="swatch" style="height:10px;width:14px;border:none;background:'+C_NOFIN+'"></i> No Financiero (encima; el borde superior es el total)</span>'
+      +'<span>Color pleno = real · tenue = pronóstico</span><span><i class="swatch" style="border-top:2px dashed '+GOLD+'"></i> Banda 10–90% del total</span><span><i class="swatch cut"></i> Último dato real</span><span><i class="swatch z2"></i> Días 91–180</span><span><i class="swatch z3"></i> Días 181–365</span>';
+  } else {
+    tr=[
+      {x:lo.x,y:lo.y,mode:'lines',line:{width:0},hoverinfo:'skip',showlegend:false,connectgaps:false},
+      {x:hi.x,y:hi.y,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip',showlegend:false,connectgaps:false},
+      {x:fc.x,y:fc.y,mode:'lines',name:'Pronóstico',line:{color:GOLD,width:2,dash:'dot'},connectgaps:false,hovertemplate:'%{y:,.0f}<extra>Pronóstico</extra>'},
+      {x:real.x,y:real.y,mode:'lines',name:'Real',line:{color:BLUE,width:2},connectgaps:false,hovertemplate:'%{y:,.0f}<extra>Real</extra>'}
+    ];
+    $('tph-leyenda').innerHTML=LEYENDA_TPH;
+  }
+  const lay=baseLayout({shapes:z.sh,annotations:ann,xaxis:{type:'date',range:[tstr(x0),tstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:res==='hora'?'transacciones por hora':'transacciones por día'},gridcolor:GRID,rangemode:'tozero',tickformat:res==='hora'?'.2s':'.3s',zeroline:false,tickfont:{color:TXT}}});
+  plot('tph-chart',tr,lay);
+  renderKpisTph(dias); renderPicosTph();
+  renderTablaDias(dias);
+  renderHeat(dias);
+}
+
+function renderKpisTph(dias){
+  const s=ST.serie, vals=dias.map(d=>({d:d,v:dayVal(s,d)})).filter(x=>x.v);
+  const tot=vals.reduce((a,x)=>a+x.v.v,0), nr=vals.filter(x=>x.v.k==='r').length, nfc=vals.length-nr;
+  let pk={v:-1,t:0};
+  vals.forEach(x=>{ if(x.v.peak>pk.v){ pk={v:x.v.peak,t:x.d+x.v.ph*HR}; } });
+  const cnt={}; vals.forEach(x=>{ cnt[x.v.ph]=(cnt[x.v.ph]||0)+1; });
+  const modo=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  let reparto=NOMBRE_SERIE[s];
+  if(s==='tot' && vals.length){ const sf=vals.reduce((a,x)=>a+dayVal('fin',x.d).v,0), sn=vals.reduce((a,x)=>a+dayVal('nofin',x.d).v,0);
+    reparto='Financiero '+fM(sf/vals.length)+' · No Financiero '+fM(sn/vals.length); }
+  const cards=[
+    ['Transacciones del período', vals.length?fM(tot):'—', 'del '+fDia(ST.desde)+' al '+fDia(ST.hasta)],
+    ['Promedio por día', vals.length?fM(tot/vals.length):'—', reparto],
+    ['TPH pico', pk.v>=0?fM(pk.v):'—', pk.v>=0?tstr(pk.t):''],
+    ['Hora pico más frecuente', modo!=null?String(modo).padStart(2,'0')+':00':'—', 'en '+(modo!=null?cnt[modo]:0)+' de '+vals.length+' días']
+  ];
+  $('tph-kpis').innerHTML = cards.map(c=>'<div class="kpi"><div class="k-label">'+esc(c[0])+'</div><div class="k-value num">'+esc(c[1])+'</div><div class="k-sub">'+esc(c[2])+'</div></div>').join('');
+}
+
+function renderTablaDias(dias){
+  const s=ST.serie, amb=s==='tot';
+  let h='<thead><tr><th>Fecha</th><th>Día</th><th>Tipo de día</th><th>Fuente</th>'+(amb?'<th>Financiero</th><th>No Financiero</th>':'')+'<th>Total</th><th>Banda 10–90%</th><th title="Transacciones por minuto: total del día ÷ 1.440 minutos">Ratio (TRX/min)</th><th>TPH pico</th><th>Hora pico</th></tr></thead><tbody>';
+  dias.slice(0,400).forEach(d=>{ const v=dayVal(s,d);
+    h+='<tr><td>'+dstr(d)+'</td><td>'+DOWN[dow(d)]+'</td><td>'+tipoDiaLargo(d)+'</td>';
+    if(!v){ h+='<td colspan="'+(amb?8:6)+'" class="small" style="text-align:left">'+(d<F0D?'sin datos completos':'—')+'</td></tr>'; return; }
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span></td>'+(amb?'<td class="num">'+fM(dayVal('fin',d).v)+'</td><td class="num">'+fM(dayVal('nofin',d).v)+'</td>':'')+'<td class="num">'+fM(v.v)+'</td><td class="num">'+(v.lo!=null?fM(v.lo)+' – '+fM(v.hi):'—')+'</td><td class="num">'+fRatio(v.v/1440)+'</td><td class="num">'+fM(v.peak)+'</td><td class="num">'+String(v.ph).padStart(2,'0')+':00</td></tr>'; });
+  $('tph-tabla-dias').innerHTML=h+'</tbody>';
+}
+
+/* ---------- picos históricos (solo datos reales de entrenamiento) ---------- */
+const PK = DATA.picos;
+const C_PICO = '#E5625E';
+const kpiHtml = cards => cards.map(c=>'<div class="kpi"><div class="k-label">'+esc(c[0])+'</div><div class="k-value num">'+esc(c[1])+'</div><div class="k-sub">'+esc(c[2])+'</div></div>').join('');
+const fFechaDia = s => { const d=pdate(s.slice(0,10)); return DOWN[dow(d)]+' '+fDia(d); };
+const fHoraPico = p => p.hora.slice(11,16)+' del '+fFechaDia(p.hora);
+const fMes = ms => { const d=new Date(ms); return MES[d.getUTCMonth()]+'-'+d.getUTCFullYear(); };   // títulos: solo mes y año
+const CAMBIO_TXT = fMes(pdate(PK.tph.cambio));
+function renderPicosTph(){
+  const P=PK.tph.series[ST.serie], d='desde el cambio de nivel ('+CAMBIO_TXT+')';
+  /* El cambio de nivel de mar-2026 fue solo de No Financieras: en Financieras basta el historial completo. */
+  if(ST.serie==='fin'){ $('tph-picos').innerHTML = kpiHtml([
+    ['Pico histórico de TPH', fM(P.todo.tph)+' / h', nf0.format(P.todo.tph/3600)+' TPS · '+fHoraPico(P.todo)],
+    ['Día con más transacciones (histórico)', fM(P.todo.dia_total), fFechaDia(P.todo.dia)]
+  ]); return; }
+  $('tph-picos').innerHTML = kpiHtml([
+    ['Pico histórico de TPH', fM(P.todo.tph)+' / h', nf0.format(P.todo.tph/3600)+' TPS · '+fHoraPico(P.todo)],
+    ['Pico de TPH '+d, fM(P.desde.tph)+' / h', nf0.format(P.desde.tph/3600)+' TPS · '+fHoraPico(P.desde)],
+    ['Día con más transacciones (histórico)', fM(P.todo.dia_total), fFechaDia(P.todo.dia)],
+    ['Día con más transacciones '+d, fM(P.desde.dia_total), fFechaDia(P.desde.dia)]
+  ]);
+}
+/* Líneas de referencia de los picos en un gráfico: [[valor, texto], ...]; si dos valores coinciden se dibuja uno. */
+function lineasPico(z, ann, lv){
+  const vistos=[];
+  lv.forEach((l,i)=>{ if(l[0]==null||vistos.some(v=>Math.abs(v-l[0])<1e-9)) return; vistos.push(l[0]);
+    z.push({type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:l[0],y1:l[0],line:{color:C_PICO,width:1.3,dash:i?'dot':'dash'}});
+    ann.push({xref:'paper',yref:'y',x:0.005,y:l[0],xanchor:'left',yanchor:'bottom',showarrow:false,text:l[1],font:{size:10,color:C_PICO}}); });
+}
+
+/* ---------- tipos de día para comparar ---------- */
+const TIPOS_CMP = [
+  ['normal','Día normal (mismo día de la semana)','sem'],
+  ['primer','Primer día laboral (lunes o día después de un feriado)','sem'],
+  ['batch','Primer batch (día hábil siguiente al primer día laboral)','sem'],
+  ['finde','Fin de semana (sin feriado)','sem'],
+  ['feriado','Feriado (el feriado siguiente, sea cual sea)','fer'],
+  ['pmes','Primer día hábil del mes','mes'],
+  ['umes','Último día hábil del mes','mes'],
+  ['quin','Quincena (día 15, o el día hábil anterior)','mes']];
+const TCMP = Object.fromEntries(TIPOS_CMP.map(t=>[t[0],t]));
+const CAL_FIN = CAL0 + (T.lab.length-1)*DAY;
+const enCal = d => d>=CAL0 && d<=CAL_FIN;
+const mesIni = d => { const x=new Date(d); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), 1); };
+const mesMas = (d,k) => { const x=new Date(d); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth()+k, 1); };
+const lunesDe = d => d-((dow(d)+6)%7)*DAY;
+function labsMes(m){ if(m<CAL0||mesMas(m,1)-DAY>CAL_FIN) return []; const out=[]; for(let d=m; d<mesMas(m,1); d+=DAY) if(isLab(d)) out.push(d); return out; }
+function quincena(m){ if(m<CAL0||m+14*DAY>CAL_FIN) return null; for(let d=m+14*DAY; d>=m; d-=DAY) if(isLab(d)) return d; return null; }
+const esPrimer = d => opDe(d)==='P';
+function esTipo(t, d, fs){
+  if(!enCal(d)) return false;
+  switch(t){
+    case 'normal': return true;
+    case 'primer': return esPrimer(d);
+    case 'batch': return opDe(d)==='B';
+    case 'finde': { const w=dow(d); if(opDe(d)!=='S') return false; return fs==='sab'?w===6:(fs==='dom'?w===0:(w===0||w===6)); }
+    case 'feriado': return isFer(d);
+    case 'pmes': { const l=labsMes(mesIni(d)); return l.length>0 && l[0]===d; }
+    case 'umes': { const l=labsMes(mesIni(d)); return l.length>0 && l[l.length-1]===d; }
+    case 'quin': return quincena(mesIni(d))===d;
+  }
+  return false;
+}
+function tipoDiaLargo(d){
+  const a=[tipoDia(d).toLowerCase()];
+  if(esTipo('pmes',d)) a.push('primer hábil del mes'); if(esTipo('umes',d)) a.push('último hábil del mes'); if(esTipo('quin',d)) a.push('quincena');
+  return a.join(' · ');
+}
+/* Base = el día elegido (o el primero de ese tipo desde ese día); comparaciones = los cuatro siguientes del mismo tipo:
+   por semana (día normal = mismo día de la semana; primer día laboral y fin de semana = el de cada semana siguiente),
+   por mes (primer/último día hábil, quincena) o el feriado siguiente. Fin de semana «ambos»: sábado y domingo de cada semana. */
+function serieCmp(t, d0, fs){
+  let base=d0, nota='';
+  if(t!=='normal'){
+    let d=d0; for(let i=0;i<800&&enCal(d)&&!esTipo(t,d,fs);i++) d+=DAY;
+    if(!esTipo(t,d,fs)) return {filas:[], nota:'No hay días de este tipo desde el '+fDia(d0)+' dentro del calendario disponible.'};
+    if(d!==d0) nota='El '+fFechaDia(dstr(d0))+' no es «'+TCMP[t][1].split(' (')[0].toLowerCase()+'»: la base es el '+fFechaDia(dstr(d))+'.';
+    base=d;
+  }
+  const filas=[], u=TCMP[t][2];
+  if(t==='finde' && fs==='ambos'){
+    const l0=lunesDe(base);
+    for(let k=0;k<=4;k++) [[5,'sáb'],[6,'dom']].forEach(x=>{ const d=l0+(7*k+x[0])*DAY;
+      filas.push({lab:(k?'+'+k+' sem':'Base'),sub:x[1],d:esTipo(t,d,'ambos')?d:null,base:k===0}); });
+  } else if(u==='sem'){
+    filas.push({lab:'Base',d:base,base:true});
+    for(let k=1;k<=4;k++){
+      let d=null;
+      if(t==='normal') d=base+7*k*DAY;
+      else { const l=lunesDe(base)+7*k*DAY; for(let j=0;j<7;j++) if(esTipo(t,l+j*DAY,fs)){ d=l+j*DAY; break; } }
+      filas.push({lab:'+'+k+' sem',d:d});
+    }
+  } else if(u==='mes'){
+    filas.push({lab:'Base',d:base,base:true});
+    for(let k=1;k<=4;k++){ const m=mesMas(mesIni(base),k); let d=null;
+      if(t==='quin') d=quincena(m); else { const l=labsMes(m); if(l.length) d=t==='pmes'?l[0]:l[l.length-1]; }
+      filas.push({lab:'+'+k+' mes',d:d}); }
+  } else {
+    filas.push({lab:'Base',d:base,base:true});
+    let d=base+DAY;
+    for(let k=1;k<=4;k++){ while(enCal(d)&&!isFer(d)) d+=DAY; filas.push({lab:'Feriado +'+k,d:enCal(d)?d:null}); d+=DAY; }
+  }
+  return {filas, nota};
+}
+const baseDe = (filas, f) => filas.find(x=>x.base && (!f.sub || x.sub===f.sub));
+const fRatio = v => v==null ? '—' : nf0.format(v);   // Ratio = TRX por minuto (como en reposting)
+const pctDif = (v, b) => (v!=null && b) ? (v/b-1)*100 : null;
+const tdPct = dv => '<td class="num '+(dv==null?'':(dv<0?'neg':'pos'))+'">'+(dv==null?'—':(dv>=0?'+':'')+nf1.format(dv)+'%')+'</td>';
+function llenarTipos(sel, sinBatch, motivo){
+  TIPOS_CMP.forEach(t=>{ const o=document.createElement('option'); o.value=t[0];
+    const nb=sinBatch&&(t[0]==='finde'||t[0]==='feriado'); o.textContent=t[1]+(nb?' — '+(motivo||'sin batch'):''); o.disabled=nb; sel.appendChild(o); });
+}
+
+/* ---------- comparar un instante con días del mismo tipo ---------- */
+function renderCmp(){
+  const s=ST.serie, d0=pdate($('cmp-fecha').value||dstr(F0D)), hh=+$('cmp-hora').value, t=$('cmp-tipo').value, fs=$('cmp-finde').value;
+  $('cmp-finde-f').style.display = t==='finde' ? '' : 'none';
+  const R=serieCmp(t,d0,fs);
+  $('cmp-nota').textContent=R.nota;
+  const rows=R.filas.map(f=>Object.assign({}, f, {ms:f.d!=null?f.d+hh*HR:null, v:f.d!=null?hourVal(s,f.d+hh*HR):null, dv:f.d!=null?dayVal(s,f.d):null}));
+  rows.forEach(r=>{ r.b=baseDe(rows,r); });
+  const labs=rows.map(r=>r.lab+(r.sub?' · '+r.sub:''));
+  let h='<thead><tr><th>Comparación</th><th>Fecha y hora</th><th>Tipo de día</th><th>Fuente</th><th>TPH</th><th>Banda TPH 10–90%</th><th>TPS</th><th>Banda TPS 10–90%</th><th title="Transacciones por minuto en la hora elegida: TPH ÷ 60">Ratio (TRX/min)</th><th>TPH vs. base</th><th>Total del día</th><th>Total vs. base</th></tr></thead><tbody>';
+  rows.forEach((r,i)=>{
+    h+='<tr><td>'+labs[i]+'</td>';
+    if(r.d==null){ h+='<td colspan="11" class="small" style="text-align:left">no hay un día de este tipo en ese período, o queda fuera del calendario disponible</td></tr>'; return; }
+    h+='<td>'+tstr(r.ms)+' ('+DOWN[dow(r.ms)]+')</td><td>'+tipoDiaLargo(r.d)+'</td>';
+    const v=r.v, bh=batchHour(r.ms);
+    if(!v){ h+='<td colspan="9" class="small" style="text-align:left">'+(bh?'hora de la ventana del batch (sin transacciones en línea)':'sin dato')+'</td></tr>'; return; }
+    const bv=r.b&&r.b.v?r.b.v.v:null, bd=r.b&&r.b.dv?r.b.dv.v:null;
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span></td><td class="num">'+nf0.format(v.v)+'</td><td class="num">'+(v.lo!=null?nf0.format(v.lo)+' – '+nf0.format(v.hi):'—')+'</td><td class="num">'+nf1.format(v.v/3600)+'</td><td class="num">'+(v.lo!=null?nf1.format(v.lo/3600)+' – '+nf1.format(v.hi/3600):'—')+'</td><td class="num">'+fRatio(v.v/60)+'</td>'
+      +tdPct(r.base?null:pctDif(v.v,bv))+'<td class="num">'+(r.dv?fM(r.dv.v):'—')+'</td>'+tdPct(r.base||!r.dv?null:pctDif(r.dv.v,bd))+'</tr>'; });
+  $('tph-tabla-cmp').innerHTML=h+'</tbody>';
+  const xs=labs, ys=rows.map(r=>r.v?r.v.v:null), cols=rows.map(r=>r.v&&r.v.k==='f'?GOLD:BLUE);
+  const base=rows.length&&rows[0].v?rows[0].v.v:null;
+  const ep=rows.map(r=>r.v&&r.v.hi!=null?r.v.hi-r.v.v:0), em=rows.map(r=>r.v&&r.v.lo!=null?r.v.v-r.v.lo:0);
+  const tr=[{x:xs,y:ys,type:'scatter',mode:'markers',marker:{color:cols,size:11,line:{color:SURF,width:2}},
+    error_y:{type:'data',symmetric:false,array:ep,arrayminus:em,color:GOLD,thickness:1.6,width:5},hovertemplate:'%{y:,.0f}<extra></extra>'}];
+  const lay=baseLayout({hovermode:'closest',xaxis:{type:'category',gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:NOMBRE_SERIE[s]+' · '+String(hh).padStart(2,'0')+':00'},gridcolor:GRID,rangemode:'tozero',tickformat:'.2s',zeroline:false,tickfont:{color:TXT}},
+    shapes: base!=null?[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:base,y1:base,line:{color:'#76757F',width:1,dash:'dash'}}]:[]});
+  plot('tph-chart-cmp',tr,lay);
+}
+
+/* ---------- perfil horario comparado ---------- */
+function renderPerfil(){
+  const s=ST.serie, d0=pdate($('perf-fecha').value||dstr(F0D));
+  const hrs=[...Array(24).keys()], tr=[];
+  const prevs=[1,2,3,4].map(k=>hrs.map(h=>{const v=hourVal(s,d0-k*7*DAY+h*HR); return v?v.v:null;}));
+  const xs=hrs.map(h=>String(h).padStart(2,'0')+':00');
+  prevs.forEach((y,i)=>tr.push({x:xs,y:y,mode:'lines',line:{color:'#8B8A96',width:1},opacity:.7,name:'hace '+(i+1)+' sem',hovertemplate:'%{y:,.0f}<extra>hace '+(i+1)+' sem</extra>',connectgaps:false}));
+  const avg=hrs.map((h,i)=>{const a=prevs.map(p=>p[i]).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;});
+  tr.push({x:xs,y:avg,mode:'lines',line:{color:'#D8D7E0',width:1.5,dash:'dash'},name:'promedio 4 sem',hovertemplate:'%{y:,.0f}<extra>promedio 4 sem</extra>'});
+  const cur=hrs.map(h=>hourVal(s,d0+h*HR)), esF=cur.some(v=>v&&v.k==='f');
+  if(esF){ tr.push({x:xs,y:cur.map(v=>v?v.lo:null),mode:'lines',line:{width:0},hoverinfo:'skip'}); tr.push({x:xs,y:cur.map(v=>v?v.hi:null),mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip'}); }
+  tr.push({x:xs,y:cur.map(v=>v?v.v:null),mode:'lines+markers',line:{color:esF?GOLD:BLUE,width:2.5,dash:esF?'dot':'solid'},marker:{size:5},name:dstr(d0),hovertemplate:'%{y:,.0f}<extra>'+dstr(d0)+(esF?' (pronóstico)':' (real)')+'</extra>'});
+  plot('tph-chart-perf',tr,baseLayout({yaxis:{title:{text:NOMBRE_SERIE[s]+' · TPH'},gridcolor:GRID,rangemode:'tozero',tickformat:'.2s',zeroline:false,tickfont:{color:TXT}}}));
+}
+
+/* ---------- mapa de calor ---------- */
+function renderHeat(dias){
+  const s=ST.serie, ds=dias.slice(0,60), hrs=[...Array(24).keys()];
+  const z=hrs.map(h=>ds.map(d=>{const v=hourVal(s,d+h*HR); return v?v.v:null;}));
+  const xs=ds.map(d=>dstr(d)), ys=hrs.map(h=>String(h).padStart(2,'0')+':00');
+  const tr=[{type:'heatmap',x:xs,y:ys,z:z,colorscale:[[0,'#0B2A45'],[0.25,'#144B7A'],[0.5,'#2070B0'],[0.75,'#6FA8DC'],[1,'#EAF3FB']],
+    hoverongaps:false,xgap:1,ygap:1,colorbar:{thickness:12,tickformat:'.2s',tickfont:{color:TXT},outlinewidth:0,title:{text:'TPH',font:{color:TXT}}},
+    hovertemplate:'%{x} %{y}<br>%{z:,.0f}<extra></extra>'}];
+  const sh=[]; if(ds.length&&F0D>ds[0]&&F0D<=ds[ds.length-1]) sh.push({type:'line',xref:'x',yref:'paper',x0:dstr(F0D),x1:dstr(F0D),y0:0,y1:1,line:{color:'#C28815',width:1.5,dash:'dash'}});
+  plot('tph-chart-heat',tr,baseLayout({hovermode:'closest',margin:{l:56,r:20,t:20,b:60},shapes:sh,xaxis:{type:'category',tickangle:-60,nticks:30,tickfont:{color:TXT,size:10}},yaxis:{autorange:'reversed',type:'category',dtick:2,tickfont:{color:TXT,size:10}}}));
+}
+
+/* ---------- backtest TPH ---------- */
+function btVal(s,h,ms){ const i=Math.round((ms-BT0)/HR), a=T.series[s].back[String(h)]; return (i>=0&&i<a.length)?a[i]:null; }
+
+/* ===================== PROCESOS ===================== */
+const SUBS = PR.subs, NSUB = SUBS.length, TOT = NSUB;                // índice NSUB = total depd0800cm
+const SNOM = {cfpd0111cm:'cfpd0111cm',depd0800cm_Lote1:'depd0800cm · Lote1',depd0800cm_Lote2:'depd0800cm · Lote2',depd0800cm_Lote3:'depd0800cm · Lote3',depd0800cm_Lote4:'depd0800cm · Lote4',lond0501cm:'lond0501cm',
+  bnccrn2dcm:'bnccrn2dcm',bncd0801:'bncd0801 (no encadenado)',depd0800cm_total:'depd0800cm · total (4 lotes)'};
+const CADENA = [1,2,3,4,5,6,0,7];                                      // orden de ejecución (índices de PR.subs); bncd0801 va al final y no depende de la cadena
+const fseg = d => d==null ? '—' : nf0.format(d*60)+' s';            // bnccrn2dcm dura segundos
+const hist={}, fcm={}, back={}, histDays=new Set(), fcDays=new Set();
+PR.hist.forEach(r=>{ hist[r[0]+'|'+r[1]]={ini:r[2],dur:r[3],tipo:PR.tipos[r[4]]}; histDays.add(r[0]); });
+PR.fc.forEach(r=>{ fcm[r[0]+'|'+r[1]]={d:r[2],d10:r[3],d90:r[4],i:r[5],i10:r[6],i90:r[7],tipo:r[9]}; fcDays.add(r[0]); });
+PR.back.forEach(r=>{ back[r[0]+'|'+r[1]+'|'+r[2]]={d:r[3],i:r[4]}; });
+const REG={}; PR.reg.forEach(r=>{ REG[r[0]]= r[1]!=null? {k:'r',v:r[1]} : {k:'f',v:r[2],lo:r[3],hi:r[4]}; });
+const allDays = [...new Set([...histDays,...fcDays])].sort();
+const PST = {sub:1, cmp:1, dia:'', desde:0, hasta:0};       // sub: subproceso del bloque de período; cmp: el del bloque de la noche
+function pv(s, day){                        // valor del subproceso s (o total) en el día de negocio
+  if(s===TOT){ const ls=[1,2,3,4].map(x=>hist[day+'|'+x]); if(ls.every(Boolean)) return {k:'r',d:ls.reduce((a,x)=>a+x.dur,0),i:ls[0].ini,tipo:ls[0].tipo};
+    const f=fcm[day+'|'+TOT]; return f?{k:'f',d:f.d,d10:f.d10,d90:f.d90,i:f.i,tipo:f.tipo}:null; }
+  const h=hist[day+'|'+s]; if(h) return {k:'r',d:h.dur,i:h.ini,tipo:h.tipo};
+  const f=fcm[day+'|'+s]; return f?{k:'f',d:f.d,d10:f.d10,d90:f.d90,i:f.i,i10:f.i10,i90:f.i90,tipo:f.tipo}:null;
+}
+function nearestDay(day, dir){ let i=allDays.findIndex(d=>d>=day); if(i<0) i=allDays.length-1; if(dir<0 && allDays[i]>day) i=Math.max(0,i-1); return allDays[i]; }
+const tipoTxt = t => t==='primer dia'?'primer día':(t||'—');
+
+/* Dos bloques independientes: el de período (PST.desde–PST.hasta) y el de una noche (PST.dia). */
+const periodoTxt = () => 'del '+fDia(PST.desde)+' al '+fDia(PST.hasta);
+function renderPeriodo(){
+  $('p-periodo-txt').textContent='Mostrando '+periodoTxt();
+  renderKpisConta(); renderPicosP(); renderGen(); renderReg(); renderTablaP(); renderDur();
+}
+/* Tarjetas de la contabilidad (cfpd0111cm y registros contables) en el período: real en las noches pasadas, pronóstico en las siguientes. */
+const CFPD = SUBS.indexOf('cfpd0111cm');
+function renderKpisConta(){
+  const dias=rangoDias(), rg=dias.map(d=>[d,REG[d]]).filter(x=>x[1]&&x[1].v!=null), cf=dias.map(d=>[d,pv(CFPD,d)]).filter(x=>x[1]&&x[1].d!=null);
+  const nr=rg.filter(x=>x[1].k==='r').length, tot=rg.reduce((a,x)=>a+x[1].v,0), mx=rg.reduce((a,x)=>(!a||x[1].v>a[1].v)?x:a,null);
+  const fin=cf.map(x=>[x[0],x[1].i+x[1].d,x[1].k]), lg=cf.reduce((a,x)=>(!a||x[1].d>a[1].d)?x:a,null), tarde=fin.reduce((a,x)=>(!a||x[1]>a[1])?x:a,null);
+  const med=a=>{ if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const fte=k=>k==='f'?' · pronóstico':' · real';
+  $('p-kpis-conta').innerHTML=kpiHtml([
+    ['Registros contables del período', rg.length?nf1.format(tot)+' M':'—', rg.length+' noches ('+nr+' reales, '+(rg.length-nr)+' pronosticadas)'],
+    ['Registros por noche (promedio)', rg.length?nf1.format(tot/rg.length)+' M':'—', 'contabilidad diaria · cfpd0111cm'],
+    ['Noche con más registros del período', mx?nf1.format(mx[1].v)+' M':'—', mx?'noche del '+fFechaDia(mx[0])+fte(mx[1].k):''],
+    ['Duración promedio de la contabilidad', cf.length?fmin(cf.reduce((a,x)=>a+x[1].d,0)/cf.length):'—', lg?'máximo '+fmin(lg[1].d)+' la noche del '+fFechaDia(lg[0])+fte(lg[1].k):''],
+    ['Fin típico de la contabilidad', fin.length?hhmm(med(fin.map(x=>x[1]))):'—', tarde?'más tarde: '+hhmm(tarde[1])+' la noche del '+fFechaDia(tarde[0])+fte(tarde[2]):'']
+  ]);
+}
+function renderPicosP(){
+  const C=PK.conta, H=C.todo, d='desde la contabilidad diaria ('+fMes(pdate(C.desde))+')';
+  $('p-picos').innerHTML=kpiHtml([
+    ['Récord de registros en una noche · historial', nf1.format(H.registros.valor/1e6)+' M', 'noche del '+fFechaDia(H.registros.dia)+(H.registros.tipo==='primer dia'?' · primer día: acumulaba el fin de semana':'')],
+    ['Récord de registros en una noche · '+d, nf1.format(C.registros.valor/1e6)+' M', 'noche del '+fFechaDia(C.registros.dia)],
+    ['Récord de ritmo de la contabilidad · historial', nf0.format(H.ritmo.valor)+' /min', 'registros por minuto de cfpd0111cm, noche del '+fFechaDia(H.ritmo.dia)+': '+nf1.format(H.ritmo.registros/1e6)+' M en '+nf0.format(H.ritmo.dur)+' min'],
+    ['Récord de ritmo de la contabilidad · '+d, nf0.format(C.ritmo.valor)+' /min', 'registros por minuto de cfpd0111cm, noche del '+fFechaDia(C.ritmo.dia)+': '+nf1.format(C.ritmo.registros/1e6)+' M en '+nf0.format(C.ritmo.dur)+' min']
+  ]);
+}
+function renderNoche(){
+  const d0=pdate(PST.dia), v=pv(1,PST.dia)||pv(0,PST.dia);
+  $('p-noche-txt').textContent='Mostrando la noche del '+fDia(d0)+' ('+DOWN[dow(d0)]+')'+(v?' · '+(v.k==='r'?'real':'pronóstico'):'');
+  renderKpisProc(PST.dia); renderGantt(PST.dia); renderCmpP();
+}
+function renderProc(){ renderPeriodo(); renderNoche(); }
+/* Línea de la noche seleccionada en los gráficos del período, para ubicarla en el panorama. */
+function marcaNoche(z, x0, x1){ const m=pdate(PST.dia); if(m>=x0 && m<x1){ z.sh.push({type:'line',xref:'x',yref:'paper',x0:PST.dia,x1:PST.dia,y0:0,y1:1,line:{color:'#F2B233',width:1.5}});
+  z.an.push({xref:'x',yref:'paper',x:PST.dia,y:1,xanchor:'left',yanchor:'top',showarrow:false,text:'noche seleccionada',font:{size:10,color:'#F2B233'}}); } return z; }
+function renderKpisProc(day){
+  const g=k=>pv(k,day), l1=g(1), tot=g(TOT), lo=g(5), cf=g(0), cr=g(6), bd=g(7);
+  const fin = cf? cf.i+cf.d : null;
+  const f=(x,fn)=>x?fn(x):'—';
+  const fte = x => x.k==='r'?'real':'pronóstico', rg=REG[day];
+  /* Fila 1: inicio y fin de la noche + contabilidad (cfpd0111cm y los registros que procesa) en una tarjeta ancha.
+     Fila 2: el resto de los procesos en orden de ejecución; bncd0801 al final porque no depende de la cadena. */
+  const tarjeta = c => '<div class="kpi"><div class="k-label">'+esc(c[0])+'</div><div class="k-value num">'+esc(c[1])+'</div><div class="k-sub">'+esc(c[2])+'</div></div>';
+  const fila1=[
+    ['Inicio del batch', l1?hhmm(l1.i):'—', l1?'Lote1 · '+fte(l1)+(l1.i10!=null?' · rango '+hhmm(l1.i10)+'–'+hhmm(l1.i90):''):'sin dato'],
+    ['Fin de la cadena', fin!=null?hhmm(fin):'—', cf?'fin de cfpd0111cm · '+tipoDiaLargo(pdate(day)):'sin dato']
+  ];
+  const conta = '<div class="kpi kpi-conta"><div class="k-label">Contabilidad · cfpd0111cm</div>'
+    + '<div class="conta-vals"><div><div class="k-value num">'+(cf?fmin(cf.d):'—')+'</div><div class="k-sub">duración'+(cf&&cf.d10!=null?' · '+nf0.format(cf.d10)+'–'+nf0.format(cf.d90)+' min':'')+'</div></div>'
+    + '<div><div class="k-value num">'+(rg?nf1.format(rg.v)+' M':'—')+'</div><div class="k-sub">registros contables'+(rg&&rg.lo!=null?' · '+nf1.format(rg.lo)+'–'+nf1.format(rg.hi)+' M':'')+'</div></div></div>'
+    + '<div class="k-sub">'+(cf?hhmm(cf.i)+' → '+hhmm(fin)+' · '+fte(cf)+(opDe(pdate(day))==='P'?' · primer día laboral':''):'sin dato')+(cf&&rg&&cf.d>0?' · ritmo '+nf0.format(rg.v*1e6/cf.d)+' registros/min (récord '+nf0.format(PK.conta.ritmo.valor)+')':'')+'</div></div>';
+  const fila2=[
+    ['depd0800cm total', tot?fmin(tot.d):'—', tot?'4 lotes · '+fte(tot)+(tot.d10!=null?' · '+nf0.format(tot.d10)+'–'+nf0.format(tot.d90)+' min':''):'sin dato'],
+    ['lond0501cm', lo?fmin(lo.d):'—', lo?fte(lo)+(lo.d10!=null?' · '+nf1.format(lo.d10)+'–'+nf1.format(lo.d90)+' min':''):'sin dato'],
+    ['bnccrn2dcm', cr?fseg(cr.d):'—', cr?fte(cr)+' · inicio '+hhmm(cr.i)+(cr.d10!=null?' · '+fseg(cr.d10)+'–'+fseg(cr.d90):''):'sin dato'],
+    ['bncd0801', bd?fmin(bd.d):'—', bd?'no encadenado · '+fte(bd)+' · inicio '+hhmm(bd.i)+(bd.d10!=null?' · '+nf0.format(bd.d10)+'–'+nf0.format(bd.d90)+' min':''):'sin dato']
+  ];
+  $('p-kpis').innerHTML = fila1.map(tarjeta).join('') + conta + fila2.map(tarjeta).join('');
+}
+
+function renderGantt(day){
+  const d0=pdate(day), past = d0 < F0D;
+  $('p-gantt-ctl').style.display = past ? 'flex' : 'none';
+  const hsel=$('p-gantt-h').value;
+  $('p-gantt-titulo').textContent='Línea de tiempo de la noche del '+fDia(d0)+' ('+DOWN[dow(d0)]+')';
+  const ent=CADENA.map(s=>({s:s,r:hist[day+'|'+s]||null,f:past?(back[day+'|'+s+'|'+hsel]||null):(fcm[day+'|'+s]||null)}));
+  const names=ent.map(e=>SNOM[SUBS[e.s]]);
+  const ms=m=>tstr(d0+m*60000);
+  const yv=ent.map(e=>SNOM[SUBS[e.s]]);
+  const tr=[];
+  const realE=ent.filter(e=>e.r), fE=ent.filter(e=>e.f);
+  const ancho = d => Math.max(d, 3)*60000;                    // barra de al menos 3 min para que se vea bnccrn2dcm (~20 s); el cursor muestra la duración real
+  if(fE.length) tr.push({type:'bar',orientation:'h',name:past?'Pronóstico ('+hsel+' d antes)':'Pronóstico',y:fE.map(e=>SNOM[SUBS[e.s]]),x:fE.map(e=>ancho(e.f.d)),base:fE.map(e=>ms(past?e.f.i:e.f.i)),
+    marker:{color:GOLD,line:{color:SURF,width:2}},offsetgroup:'f',width:0.34,
+    customdata:fE.map(e=>[hhmm(e.f.i),hhmm(e.f.i+e.f.d),nf1.format(e.f.d),(e.f.i10!=null?' (rango '+hhmm(e.f.i10)+'–'+hhmm(e.f.i90)+')':'')]),hovertemplate:'<b>%{y}</b><br>inicio %{customdata[0]}%{customdata[3]} · fin %{customdata[1]}<br>duración %{customdata[2]} min<extra>Pronóstico</extra>'});
+  if(realE.length) tr.push({type:'bar',orientation:'h',name:'Real',y:realE.map(e=>SNOM[SUBS[e.s]]),x:realE.map(e=>ancho(e.r.dur)),base:realE.map(e=>ms(e.r.ini)),
+    marker:{color:BLUE,line:{color:SURF,width:2}},offsetgroup:'r',width:0.34,
+    customdata:realE.map(e=>[hhmm(e.r.ini),hhmm(e.r.ini+e.r.dur),nf1.format(e.r.dur)]),hovertemplate:'<b>%{y}</b><br>inicio %{customdata[0]} · fin %{customdata[1]}<br>duración %{customdata[2]} min<extra>Real</extra>'});
+  const mins=[...ent.map(e=>e.r?e.r.ini:null),...ent.map(e=>e.f?e.f.i:null)].filter(x=>x!=null), maxs=[...ent.map(e=>e.r?e.r.ini+e.r.dur:null),...ent.map(e=>e.f?e.f.i+e.f.d:null)].filter(x=>x!=null);
+  const a=mins.length?Math.min(...mins)-30:22*60, b=maxs.length?Math.max(...maxs)+30:32*60;
+  const lay=baseLayout({barmode:'group',hovermode:'closest',margin:{l:190,r:24,t:20,b:44},showlegend:true,legend:{orientation:'h',y:1.1,font:{color:TXT}},
+    xaxis:{type:'date',range:[ms(a),ms(b)],gridcolor:GRID,tickformat:'%H:%M',tickfont:{color:TXT},linecolor:'#363640'},
+    yaxis:{type:'category',autorange:'reversed',categoryarray:yv,gridcolor:GRID,tickfont:{color:TXT2},rangemode:'normal'}});
+  plot('p-gantt',tr,lay);
+  $('p-gantt-sub').textContent = realE.length ? 'día ya ocurrido' : (zonaDe(d0)? ZNOM[zonaDe(d0)] : '');
+}
+
+function rangoDias(){ return allDays.filter(d=>{const m=pdate(d); return m>=PST.desde&&m<=PST.hasta;}); }
+const PCUT = pdate(PR.ultimo)+DAY;   // los datos reales de procesos llegan hasta el día de negocio PR.ultimo
+function zoneShapesP(x0,x1){ const z=zoneShapes(x0,x1); if(!(F0>=x0&&F0<=x1)) z.sh.push({type:'line',xref:'x',yref:'paper',x0:0,x1:0,y0:0,y1:1,line:{color:'#76757F',width:1.5,dash:'dash'}}); z.sh=z.sh.map(s=>{ if(s.type==='line'){ s.x0=dstr(PCUT); s.x1=dstr(PCUT);} else { s.x0=s.x0.slice(0,10); s.x1=s.x1.slice(0,10);} return s; }); z.an.forEach(a=>{a.x=a.x.slice(0,10);}); return z; }
+
+function serieP(s, dias){
+  const R={x:[],y:[]},F={x:[],y:[]},L={x:[],y:[]},H={x:[],y:[]};
+  dias.forEach(d=>{ const v=pv(s,d); const push=(o,y)=>{o.x.push(d);o.y.push(y);};
+    if(v&&v.k==='r'){ push(R,v.d); push(F,null); push(L,null); push(H,null); }
+    else if(v){ push(R,null); push(F,v.d); push(L,v.d10); push(H,v.d90); }
+    else { push(R,null); push(F,null); push(L,null); push(H,null); } });
+  return {R,F,L,H};
+}
+function renderGen(){
+  const dias=rangoDias(), x0=PST.desde, x1=PST.hasta+DAY, z=marcaNoche(zoneShapesP(x0,x1),x0,x1);
+  $('p-gen-sub').textContent=periodoTxt();
+  const ents=[[TOT,'depd0800cm (4 lotes)','#3D8FE0'],[5,'lond0501cm','#8FB6C9'],[6,'bnccrn2dcm','#199e70'],[0,'cfpd0111cm','#F4F6F8'],[7,'bncd0801','#d95926']], tr=[];
+  ents.forEach(e=>{
+    const R={x:[],y:[]},F={x:[],y:[]}; let ult=null;
+    dias.forEach(d=>{ const v=pv(e[0],d); if(v&&v.k==='r'){ R.x.push(d);R.y.push(v.d); ult=[d,v.d]; } else if(v){ F.x.push(d);F.y.push(v.d); } });
+    if(ult&&F.x.length){ F.x.unshift(ult[0]); F.y.unshift(ult[1]); }
+    tr.push({x:R.x,y:R.y,mode:'lines',name:e[1],legendgroup:e[1],line:{color:e[2],width:1.6},hovertemplate:'%{y:.1f} min<extra>'+e[1]+' · real</extra>',connectgaps:false});
+    tr.push({x:F.x,y:F.y,mode:'lines',name:e[1]+' (pronóstico)',legendgroup:e[1],showlegend:false,line:{color:e[2],width:2,dash:'dot'},hovertemplate:'%{y:.1f} min<extra>'+e[1]+' · pronóstico</extra>',connectgaps:false});
+  });
+  plot('p-gen',tr,baseLayout({shapes:z.sh,annotations:z.an,showlegend:true,legend:{orientation:'h',y:1.12,font:{color:TXT}},xaxis:{type:'date',range:[dstr(x0),dstr(x1)],gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:'minutos'},gridcolor:GRID,rangemode:'tozero',zeroline:false,tickfont:{color:TXT}}}));
+}
+function renderDur(){
+  const s=PST.sub, dias=rangoDias(), nm=SNOM[SUBS[s]||'depd0800cm_total'];
+  $('p-dur-titulo').textContent='Duración por día — '+nm;
+  $('p-dur-sub').textContent=periodoTxt();
+  const x0=PST.desde, x1=PST.hasta+DAY, z=marcaNoche(zoneShapesP(x0,x1),x0,x1), q=serieP(s,dias);
+  const ann=z.an.slice(), sh=z.sh.slice();
+  const cambios = s===0? [['2026-03-01','sube ≈35% (mar-2026)']] : ([1,2,3,4,TOT].includes(s)? [['2026-07-01','baja ≈20% (jul-2026)']] : []);
+  cambios.forEach(c=>{ const m=pdate(c[0]); if(m>x0&&m<x1){ sh.push({type:'line',xref:'x',yref:'paper',x0:c[0],x1:c[0],y0:0,y1:1,line:{color:'#F08C3A',width:1,dash:'dot'}}); ann.push({xref:'x',yref:'paper',x:c[0],y:0,xanchor:'left',yanchor:'bottom',showarrow:false,text:'cambio de nivel: '+c[1],font:{size:10,color:'#F08C3A'}}); }});
+  const tr=[{x:q.L.x,y:q.L.y,mode:'lines',line:{width:0},hoverinfo:'skip'},{x:q.H.x,y:q.H.y,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip'},
+    {x:q.F.x,y:q.F.y,mode:'lines',line:{color:GOLD,width:2,dash:'dot'},hovertemplate:'%{y:.1f} min<extra>Pronóstico</extra>',connectgaps:false},
+    {x:q.R.x,y:q.R.y,mode:'lines+markers',line:{color:BLUE,width:1.6},marker:{size:3.5,color:BLUE},hovertemplate:'%{y:.1f} min<extra>Real</extra>',connectgaps:false}];
+  plot('p-dur',tr,baseLayout({shapes:sh,annotations:ann,xaxis:{type:'date',range:[dstr(x0),dstr(x1)],gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:'minutos'},gridcolor:GRID,rangemode:'tozero',zeroline:false,tickfont:{color:TXT}}}));
+  const fcv=dias.map(d=>pv(s,d)).filter(v=>v&&v.k==='f');
+  $('p-dur-nota').textContent = fcv.length? 'La línea es el valor típico esperado: cada noche real se desvía de ella dentro de la banda. Asume que el nivel actual se mantiene.' : '';
+}
+function renderReg(){
+  const dias=rangoDias(), x0=PST.desde, x1=PST.hasta+DAY, z=marcaNoche(zoneShapesP(x0,x1),x0,x1);
+  $('p-reg-sub').textContent=periodoTxt();
+  const R={x:[],y:[]},F={x:[],y:[]},L={x:[],y:[]},H={x:[],y:[]};
+  dias.forEach(d=>{ const v=REG[d]; if(!v) return;
+    if(v.k==='r'){ R.x.push(d);R.y.push(v.v); } else { F.x.push(d);F.y.push(v.v);L.x.push(d);L.y.push(v.lo);H.x.push(d);H.y.push(v.hi); } });
+  const tr=[{x:L.x,y:L.y,mode:'lines',line:{width:0},hoverinfo:'skip'},{x:H.x,y:H.y,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip'},
+    {x:F.x,y:F.y,mode:'lines',line:{color:GOLD,width:2,dash:'dot'},hovertemplate:'%{y:.1f} M<extra>Pronóstico</extra>',connectgaps:false},
+    {x:R.x,y:R.y,mode:'lines+markers',line:{color:BLUE,width:1.6},marker:{size:3.5,color:BLUE},hovertemplate:'%{y:.1f} M<extra>Real</extra>',connectgaps:false}];
+  lineasPico(z.sh, z.an, [[PK.conta.registros.valor/1e6, 'Pico actual: '+nf1.format(PK.conta.registros.valor/1e6)+' M']]);
+  plot('p-reg',tr,baseLayout({shapes:z.sh,annotations:z.an,xaxis:{type:'date',range:[dstr(x0),dstr(x1)],gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:'millones de registros'},gridcolor:GRID,rangemode:'tozero',zeroline:false,tickfont:{color:TXT}}}));
+}
+function renderTablaP(){
+  const dias=rangoDias();
+  $('p-tabla-sub').textContent=periodoTxt();
+  let h='<thead><tr><th>Día de negocio</th><th>Día</th><th>Tipo de día</th><th>Inicio Lote1</th><th>bncd0801</th><th>depd0800cm total</th><th>lond0501cm</th><th>bnccrn2dcm (s)</th><th>cfpd0111cm</th><th>Registros contables (M)</th><th>Fin de la cadena</th><th>Fuente</th></tr></thead><tbody>';
+  dias.slice(0,500).forEach(d=>{ const t=pv(TOT,d), l=pv(5,d), c=pv(0,d), l1=pv(1,d), cr=pv(6,d), bd=pv(7,d); const k=(c||t||l1||{}).k;
+    h+='<tr data-d="'+d+'"'+(d===PST.dia?' style="background:var(--gold-soft)"':'')+'><td>'+d+'</td><td>'+DOWN[dow(pdate(d))]+'</td><td>'+tipoDiaLargo(pdate(d))+'</td>'
+     +'<td class="num">'+(l1?hhmm(l1.i):'—')+'</td><td class="num">'+(bd?nf1.format(bd.d):'—')+'</td><td class="num">'+(t?nf1.format(t.d):'—')+'</td><td class="num">'+(l?nf1.format(l.d):'—')+'</td><td class="num">'+(cr?nf0.format(cr.d*60):'—')+'</td><td class="num">'+(c?nf0.format(c.d):'—')+'</td><td class="num">'+(REG[d]?nf1.format(REG[d].v):'—')+'</td><td class="num">'+(c?hhmm(c.i+c.d):'—')+'</td>'
+     +'<td>'+(k?'<span class="tag '+k+'">'+(k==='r'?'real':'pronóstico')+'</span>':'—')+'</td></tr>'; });
+  $('p-tabla-dias').innerHTML=h+'</tbody>';
+}
+function renderCmpP(){
+  const s=PST.cmp, d0=pdate(PST.dia), t=$('p-cmp-tipo').value;
+  const R=serieCmp(t,d0,'ambos');
+  $('p-cmp-sub').textContent='base: noche del '+fDia(d0)+' ('+DOWN[dow(d0)]+')';
+  $('p-cmp-nota').textContent=R.nota;
+  const rows=R.filas.map(f=>Object.assign({}, f, {day:f.d!=null?dstr(f.d):null, v:f.d!=null?pv(s,dstr(f.d)):null})), labs=rows.map(r=>r.lab);
+  const base=rows.length&&rows[0].v?rows[0].v.d:null;
+  const conReg=SUBS[s]==='cfpd0111cm', nc=conReg?6:5;     // en la contabilidad se agrega el volumen de registros contables
+  const regTxt=d=>{ const g=REG[d]; if(!g||g.v==null) return '—'; return nf1.format(g.v)+' M'+(g.lo!=null?' <span class="small">('+nf1.format(g.lo)+' – '+nf1.format(g.hi)+')</span>':''); };
+  let h='<thead><tr><th>Comparación</th><th>Día de negocio</th><th>Tipo de día</th><th>Fuente</th><th>Duración</th><th>Banda 10–90%</th><th>Inicio</th><th>Vs. base</th>'+(conReg?'<th>Registros contables (banda 10–90%)</th>':'')+'</tr></thead><tbody>';
+  rows.forEach((r,i)=>{ const v=r.v; h+='<tr><td>'+labs[i]+'</td>';
+    if(r.day==null){ h+='<td colspan="'+(nc+2)+'" class="small" style="text-align:left">no hay un día de este tipo en ese período, o queda fuera del calendario disponible</td></tr>'; return; }
+    h+='<td>'+r.day+' ('+DOWN[dow(r.d)]+')</td><td>'+tipoDiaLargo(r.d)+'</td>';
+    if(!v){ h+='<td colspan="'+nc+'" class="small" style="text-align:left">sin dato (sin batch ese día o fuera del rango)</td></tr>'; return; }
+    const dv=i>0?pctDif(v.d,base):null;
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span></td><td class="num">'+nf1.format(v.d)+' min</td><td class="num">'+(v.d10!=null?nf1.format(v.d10)+' – '+nf1.format(v.d90):'—')+'</td><td class="num">'+hhmm(v.i)+'</td>'+tdPct(dv)+(conReg?'<td class="num">'+regTxt(r.day)+'</td>':'')+'</tr>'; });
+  $('p-tabla-cmp').innerHTML=h+'</tbody>';
+  const ys=rows.map(r=>r.v?r.v.d:null), cols=rows.map(r=>r.v&&r.v.k==='f'?GOLD:BLUE);
+  const ep=rows.map(r=>r.v&&r.v.d90!=null?r.v.d90-r.v.d:0), em=rows.map(r=>r.v&&r.v.d10!=null?r.v.d-r.v.d10:0);
+  const tr=[{x:labs,y:ys,type:'bar',marker:{color:cols,line:{color:SURF,width:2}},width:0.5,error_y:{type:'data',symmetric:false,array:ep,arrayminus:em,color:'#C28815',thickness:1.4,width:5},hovertemplate:'%{y:.1f} min<extra></extra>'}];
+  plot('p-chart-cmp',tr,baseLayout({hovermode:'closest',xaxis:{type:'category',gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:SNOM[SUBS[s]||'depd0800cm_total']+' · minutos'},gridcolor:GRID,rangemode:'tozero',zeroline:false,tickfont:{color:TXT}},
+    shapes:base!=null?[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:base,y1:base,line:{color:'#76757F',width:1,dash:'dash'}}]:[]}));
+}
+
+/* ===================== COLAS ===================== */
+const CQ = DATA.colas, CS = CQ.series, CN = CQ.colas;
+const CD0 = Math.floor(T0/DAY)*DAY;                        // primer día del histórico diario
+const CH0 = Date.parse(CQ.h_t0.replace(' ','T')+'Z');      // inicio del detalle horario real
+const CHF = F0 + CQ.fc_horas*HR;                           // fin del detalle horario pronosticado
+const FAM = CQ.familias, FAMN = Object.keys(FAM).concat(['Otras']);
+const FAMC = {'OM':'#3D8FE0','CI':'#d95926','DEP / DP':'#199e70','GEN':'#C28815','Otras':'#6B7683'};
+const famDe = q => Object.keys(FAM).find(f=>FAM[f].includes(q)) || 'Otras';
+const NOCHE = new Set([23,0,1,2,3,4]);
+const CST = {cola:CN[0], res:'dia', desde:0, hasta:0};
+const fT = v => v==null ? '—' : (v>=1e6 ? nf1.format(v/1e6)+' M' : (v>=1e4 ? nf0.format(v/1e3)+' k' : nf0.format(v)));
+const fTps = v => v==null ? '—' : (v>=36000 ? nf0.format(v/3600) : nf1.format(v/3600));
+const fPct = v => v==null||isNaN(v) ? '—' : nf1.format(v*100)+'%';
+function cHour(q, ms){                                      // undefined = fuera del detalle horario; null = sin dato
+  const S=CS[q];
+  if(ms<F0){ if(ms<CH0) return undefined; const v=S.h[Math.round((ms-CH0)/HR)]; return v==null?null:{v:v,k:'r'}; }
+  if(ms>=CHF) return undefined;
+  const v=S.f[Math.round((ms-F0)/HR)]; if(v==null) return null;
+  const b=S.banda_h[NOCHE.has(new Date(ms).getUTCHours())?'noche':'dia'][tramoDe(Math.floor(ms/DAY)*DAY)];
+  return {v:v,lo:Math.max(0,(v+1)*b[0]-1),hi:(v+1)*b[1]-1,k:'f'};
+}
+function cDay(q, d){
+  const S=CS[q];
+  if(d<F0D){ const i=Math.round((d-CD0)/DAY); if(i<0) return null; const v=S.hd[i]; return v==null?null:{v:v,k:'r',peak:S.hp[i],ph:S.hh[i]}; }
+  const j=Math.round((d-F0D)/DAY); if(j>=S.fd.length) return null;
+  const v=S.fd[j], b=S.banda_d[tramoDe(d)];
+  return {v:v,k:'f',lo:v*b[0],hi:v*b[1],peak:S.fp[j],peak90:S.fp90[j],ph:S.fh[j]};
+}
+/* Tres bloques con su propio tiempo: panorama (PNC), detalle de una cola (CST) y simulador (HST.desde/hasta).
+   La cola (CST.cola) es la misma en el detalle y en el simulador. */
+const PNC = {desde:0, hasta:0};
+const rangoTxt = (a,b) => 'del '+fDia(a)+' al '+fDia(b);
+function rangoPasadoFuturo(n){ if(n==='all') return [CD0, F0D+364*DAY]; return desdeHoy(n); }
+function setRangoC(n){
+  [CST.desde,CST.hasta]=rangoPasadoFuturo(n);
+  $('c-desde').value=dstr(CST.desde); $('c-hasta').value=dstr(CST.hasta);
+}
+function setRangoPN(n){
+  [PNC.desde,PNC.hasta]=rangoPasadoFuturo(n);
+  $('cp-desde').value=dstr(PNC.desde); $('cp-hasta').value=dstr(PNC.hasta);
+}
+function setRangoH(n){                                       // n > 0: los n días desde hoy; n < 0: los |n| días anteriores a hoy
+  n=+n; if(n<0){ HST.desde=HOY+n*DAY; HST.hasta=HOY-DAY; } else [HST.desde, HST.hasta] = desdeHoy(n);
+  $('h-desde').value=dstr(HST.desde); $('h-hasta').value=dstr(HST.hasta);
+}
+function renderPanorama(){
+  const dias=daysIn(PNC.desde,PNC.hasta), filas=resumenColas(dias), t=rangoTxt(PNC.desde,PNC.hasta);
+  $('cp-txt').textContent='Mostrando '+t;
+  $('c-tabla-colas-sub').textContent=t; $('h-tabla-sub').textContent=t;
+  renderComp(dias); renderTablaColas(filas); renderHilosTabla(filas,dias);
+}
+
+function renderColas(){
+  const q=CST.cola, S=CS[q], dias=daysIn(CST.desde,CST.hasta), nd=dias.length;
+  const x0=CST.desde, x1=CST.hasta+DAY;
+  let res=CST.res;
+  const forzado = res==='hora' && (x0<CH0 || x1>CHF);
+  if(forzado) res='dia';
+  $('c-titulo').textContent = 'Cola '+q+(res==='hora'?' — TPH por hora':' — total diario');
+  $('c-sub').textContent = rangoTxt(x0,CST.hasta)+' · '+nd+' día'+(nd>1?'s':'');
+  $('c-cola-txt').textContent = 'Mostrando la cola '+q+' '+rangoTxt(x0,CST.hasta);
+  $('c-tabla-dias-tit').textContent = 'Resumen por día — cola '+q; $('c-tabla-dias-sub').textContent = rangoTxt(x0,CST.hasta);
+  const nDesv = S.desvios.filter(d=>{const m=pdate(d); return m>=x0&&m<x1;}).length;
+  $('c-nota').textContent = (forzado?'El detalle por hora existe del '+dstr(CH0)+' al '+dstr(CHF-DAY)+'; fuera de ese tramo la vista es por día. ':'')
+    + (nDesv?nDesv+' día'+(nDesv>1?'s':'')+' del rango con desvío temporal de tráfico en esta cola (dato real; no se usa para entrenar).':'');
+  const real={x:[],y:[]}, fc={x:[],y:[]}, lo={x:[],y:[]}, hi={x:[],y:[]};
+  const add=(x,v)=>{ real.x.push(x); fc.x.push(x); lo.x.push(x); hi.x.push(x);
+    real.y.push(v&&v.k==='r'?v.v:null); fc.y.push(v&&v.k==='f'?v.v:null); lo.y.push(v&&v.k==='f'?v.lo:null); hi.y.push(v&&v.k==='f'?v.hi:null); };
+  if(res==='hora'){ for(let ms=Math.floor(x0/HR)*HR; ms<x1; ms+=HR) add(tstr(ms), cHour(q,ms)); }
+  else dias.forEach(d=>add(tstr(d+12*HR), cDay(q,d)));
+  const z=zoneShapes(x0,x1), ann=z.an.slice();
+  (CQ.escalones[q]||[]).forEach(e=>{ const m=pdate(e); if(m>=x0&&m<x1) z.sh.push({type:'line',xref:'x',yref:'paper',x0:tstr(m),x1:tstr(m),y0:0,y1:1,line:{color:'#F08C3A',width:1.5,dash:'dot'}}); });
+  { /* En el gráfico solo el pico del enrutamiento vigente: el de antes de un cambio puede ser varias veces mayor y aplanaría la serie. */
+    const P=PK.colas[q], p=P.desde||P.todo, k=res==='hora'?'tph':'dia_total', u=res==='hora'?' / h':'';
+    lineasPico(z.sh, ann, [[p[k], (P.desde?'Pico actual: ':'Pico histórico: ')+fT(p[k])+u]]); }
+  const tr=[
+    {x:lo.x,y:lo.y,mode:'lines',line:{width:0},hoverinfo:'skip',connectgaps:false},
+    {x:hi.x,y:hi.y,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip',connectgaps:false},
+    {x:fc.x,y:fc.y,mode:'lines',name:'Pronóstico',line:{color:GOLD,width:2,dash:'dot'},connectgaps:false,hovertemplate:'%{y:,.0f}<extra>Pronóstico</extra>'},
+    {x:real.x,y:real.y,mode:'lines',name:'Real',line:{color:BLUE,width:2},connectgaps:false,hovertemplate:'%{y:,.0f}<extra>Real</extra>'}
+  ];
+  plot('c-chart',tr,baseLayout({shapes:z.sh,annotations:ann,xaxis:{type:'date',range:[tstr(x0),tstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:res==='hora'?'transacciones por hora':'transacciones por día'},gridcolor:GRID,rangemode:'tozero',tickformat:'.3s',zeroline:false,tickfont:{color:TXT}}}));
+  renderKpisC(resumenColas(dias),dias); renderPicosC(); renderTablaDiasC(dias);
+}
+
+function resumenColas(dias){                                 // una fila por cola para el período
+  /* Pico = hora más cargada del período: valor real en días pasados y techo (P90) del pronóstico en días futuros,
+     el mismo criterio con que se dimensionan los hilos. */
+  const filas=CN.map(q=>{ let tot=0,n=0,pk=-1,pt=0,p90=-1; const cnt={};
+    dias.forEach(d=>{ const v=cDay(q,d); if(!v) return; tot+=v.v; n++; const p=v.k==='f'&&v.peak90!=null?v.peak90:v.peak;
+      if(p!=null&&p>pk){pk=p;pt=d+v.ph*HR;} if(v.peak90!=null&&v.peak90>p90) p90=v.peak90; if(v.ph!=null) cnt[v.ph]=(cnt[v.ph]||0)+1; });
+    const modo=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+    return {q:q,tot:tot,n:n,pk:pk,pt:pt,p90:p90,modo:modo}; });
+  const total=filas.reduce((a,f)=>a+f.tot,0);
+  filas.forEach(f=>{ f.share=total>0?f.tot/total:null; });
+  return filas;
+}
+function renderKpisC(filas,dias){
+  const f=filas.find(x=>x.q===CST.cola), nr=dias.filter(d=>{const v=cDay(CST.cola,d); return v&&v.k==='r';}).length;
+  const cards=[
+    ['Transacciones del período', f.n?fM(f.tot):'—', rangoTxt(CST.desde,CST.hasta)],
+    ['Promedio por día', f.n?fM(f.tot/f.n):'—', 'cola '+f.q+' · familia '+famDe(f.q)],
+    ['Hora pico', f.pk>=0?fT(f.pk)+' TPH':'—', f.pk>=0?fTps(f.pk)+' TPS · '+tstr(f.pt):''],
+    ['Parte del volumen total', fPct(f.share), 'de todas las colas en el período']
+  ];
+  $('c-kpis').innerHTML = cards.map(c=>'<div class="kpi"><div class="k-label">'+esc(c[0])+'</div><div class="k-value num">'+esc(c[1])+'</div><div class="k-sub">'+esc(c[2])+'</div></div>').join('');
+}
+function renderPicosC(){
+  const q=CST.cola, P=PK.colas[q], cards=[];
+  const par=(p,et)=>{ cards.push(['Pico de TPH '+et, fT(p.tph)+' / h', fTps(p.tph)+' TPS · '+fHoraPico(p)]); cards.push(['Día con más transacciones '+et, fT(p.dia_total), fFechaDia(p.dia)]); };
+  par(P.todo, '· historial'+(P.desde?'':' (sin cambios de enrutamiento)'));
+  if(P.desde) par(P.desde, 'desde el último cambio de enrutamiento ('+fMes(pdate(P.cambio))+')');
+  $('c-picos').innerHTML=kpiHtml(cards);
+}
+function renderTablaColas(filas){
+  let h='<thead><tr><th>Cola</th><th>Familia</th><th>Promedio por día</th><th title="Transacciones de la cola ÷ todas las transacciones del período (Financieras + No Financieras)">% de todas las transacciones</th><th title="Transacciones por minuto: promedio por día ÷ 1.440 minutos">Ratio (TRX/min)</th><th>TPH pico</th><th>TPS pico</th><th>Hora pico habitual</th></tr></thead><tbody>';
+  filas.forEach(f=>{ const sel=f.q===CST.cola;
+    h+='<tr data-q="'+f.q+'" style="cursor:pointer'+(sel?';background:var(--brand-soft)':'')+'"><td><b>'+f.q+'</b>'+(CQ.perfil_simple.includes(f.q)?' <span class="tag">mínima</span>':'')+'</td><td>'+famDe(f.q)+'</td>'
+      +'<td class="num">'+(f.n?fT(f.tot/f.n):'—')+'</td><td class="num">'+fPct(f.share)+'</td><td class="num">'+(f.n?fRatio(f.tot/f.n/1440):'—')+'</td><td class="num">'+(f.pk>=0?fT(f.pk):'—')+'</td>'
+      +'<td class="num" title="'+(f.pk>=0?tstr(f.pt):'')+'">'+(f.pk>=0?fTps(f.pk):'—')+'</td><td class="num">'+(f.modo!=null?String(f.modo).padStart(2,'0')+':00':'—')+'</td></tr>'; });
+  $('c-tabla-colas').innerHTML=h+'</tbody>';
+}
+function renderComp(dias){
+  const xs=[], ys={}, op=[]; FAMN.forEach(f=>ys[f]=[]);
+  dias.forEach(d=>{ const vs=CN.map(q=>cDay(q,d)); if(vs.some(v=>!v)) return;
+    xs.push(dstr(d)); op.push(vs[0].k==='r'?1:0.55);
+    const s={}; FAMN.forEach(f=>s[f]=0); CN.forEach((q,i)=>{ s[famDe(q)]+=vs[i].v; }); FAMN.forEach(f=>ys[f].push(s[f])); });
+  const fino=xs.length>70;
+  const tr=FAMN.map(f=>({type:'bar',name:f,x:xs,y:ys[f],marker:{color:FAMC[f],opacity:op,line:{color:SURF,width:fino?0:1}},hovertemplate:'%{y:.3s}<extra>'+f+'</extra>'}));
+  const sh=[]; if(F0D>PNC.desde&&F0D<=PNC.hasta) sh.push({type:'line',xref:'x',yref:'paper',x0:tstr(F0D-12*HR),x1:tstr(F0D-12*HR),y0:0,y1:1,line:{color:'#76757F',width:1.5,dash:'dash'}});
+  plot('c-comp',tr,baseLayout({barmode:'stack',bargap:fino?0.05:0.18,shapes:sh,xaxis:{type:'date',gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:'transacciones por día'},gridcolor:GRID,rangemode:'tozero',tickformat:'.3s',zeroline:false,tickfont:{color:TXT}}}));
+  $('c-comp-sub').textContent = rangoTxt(PNC.desde,PNC.hasta)+' · '+xs.length+' días con dato completo';
+  $('c-comp-leg').innerHTML = FAMN.map(f=>'<span><i class="swatch" style="height:10px;width:12px;border:none;background:'+FAMC[f]+'"></i> '+esc(f)+(FAM[f]?' ('+FAM[f].join(', ')+')':' (LON, PFM, CAS, FN1, OLR, VST)')+'</span>').join('')
+    + '<span>Color pleno = real · tenue = pronóstico</span>';
+}
+function renderTablaDiasC(dias){
+  const q=CST.cola, dv=new Set(CS[q].desvios);
+  let h='<thead><tr><th>Fecha</th><th>Día</th><th>Tipo de día</th><th>Fuente</th><th>Total</th><th>Banda 10–90%</th><th title="Transacciones por minuto: total del día ÷ 1.440 minutos">Ratio (TRX/min)</th><th>TPH pico</th><th>TPS pico</th><th>Hora pico</th></tr></thead><tbody>';
+  dias.slice(0,400).forEach(d=>{ const v=cDay(q,d);
+    h+='<tr><td>'+dstr(d)+'</td><td>'+DOWN[dow(d)]+'</td><td>'+tipoDiaLargo(d)+'</td>';
+    if(!v){ h+='<td colspan="7" class="small" style="text-align:left">'+(d<F0D?'sin datos completos':'—')+'</td></tr>'; return; }
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span>'+(dv.has(dstr(d))?' <span class="tag">desvío</span>':'')+'</td><td class="num">'+fT(v.v)+'</td><td class="num">'+(v.lo!=null?fT(v.lo)+' – '+fT(v.hi):'—')+'</td><td class="num">'+fRatio(v.v/1440)+'</td><td class="num">'+fT(v.peak)+'</td><td class="num">'+fTps(v.peak)+'</td><td class="num">'+(v.ph!=null?String(v.ph).padStart(2,'0')+':00':'—')+'</td></tr>'; });
+  $('c-tabla-dias').innerHTML=h+'</tbody>';
+}
+/* Comparar la cola por tipo de día: misma lógica que la pestaña TXN (serieCmp), con el detalle horario de la cola. */
+function renderCmpC(){
+  const q=CST.cola, d0=pdate($('c-cmp-fecha').value||dstr(F0D)), hh=+$('c-cmp-hora').value, t=$('c-cmp-tipo').value, fs=$('c-cmp-finde').value;
+  $('c-cmp-finde-f').style.display = t==='finde' ? '' : 'none';
+  $('c-cmp-tit').textContent='Comparar un instante con los siguientes días del mismo tipo — cola '+q;
+  const R=serieCmp(t,d0,fs);
+  $('c-cmp-nota').textContent=R.nota;
+  const rows=R.filas.map(f=>Object.assign({}, f, {ms:f.d!=null?f.d+hh*HR:null, v:f.d!=null?cHour(q,f.d+hh*HR):null, dv:f.d!=null?cDay(q,f.d):null}));
+  rows.forEach(r=>{ r.b=baseDe(rows,r); });
+  const labs=rows.map(r=>r.lab+(r.sub?' · '+r.sub:''));
+  $('c-cmp-sub').textContent='cola '+q+' · '+String(hh).padStart(2,'0')+':00';
+  let h='<thead><tr><th>Comparación</th><th>Fecha y hora</th><th>Tipo de día</th><th>Fuente</th><th>TPH</th><th>Banda TPH 10–90%</th><th>TPS</th><th title="Transacciones por minuto en la hora elegida: TPH ÷ 60">Ratio (TRX/min)</th><th>TPH vs. base</th><th>Total del día</th><th>Banda total 10–90%</th><th>Total vs. base</th></tr></thead><tbody>';
+  rows.forEach((r,i)=>{
+    h+='<tr><td>'+labs[i]+'</td>';
+    if(r.d==null){ h+='<td colspan="11" class="small" style="text-align:left">no hay un día de este tipo en ese período, o queda fuera del calendario disponible</td></tr>'; return; }
+    h+='<td>'+tstr(r.ms)+' ('+DOWN[dow(r.ms)]+')</td><td>'+tipoDiaLargo(r.d)+'</td>';
+    const v=r.v, dv=r.dv, k=(v&&v.k)||(dv&&dv.k);
+    h+='<td>'+(k?'<span class="tag '+k+'">'+(k==='r'?'real':'pronóstico')+'</span>':'—')+'</td>';
+    if(v){ const bv=r.b&&r.b.v?r.b.v.v:null;
+      h+='<td class="num">'+nf0.format(v.v)+'</td><td class="num">'+(v.lo!=null?nf0.format(v.lo)+' – '+nf0.format(v.hi):'—')+'</td><td class="num">'+fTps(v.v)+'</td><td class="num">'+fRatio(v.v/60)+'</td>'+tdPct(r.base?null:pctDif(v.v,bv)); }
+    else h+='<td colspan="5" class="small" style="text-align:left">'+(v===undefined?'sin detalle por hora para este día':(batchHour(r.ms)?'hora de la ventana del batch':'sin dato'))+'</td>';
+    const bd=r.b&&r.b.dv?r.b.dv.v:null;
+    h+='<td class="num">'+(dv?fT(dv.v):'—')+'</td><td class="num">'+(dv&&dv.lo!=null?fT(dv.lo)+' – '+fT(dv.hi):'—')+'</td>'+tdPct(r.base||!dv?null:pctDif(dv.v,bd))+'</tr>'; });
+  $('c-tabla-cmp').innerHTML=h+'</tbody>';
+  /* Gráfico: la hora elegida si la base tiene detalle por hora; si no, el total del día. */
+  const porHora=rows.length&&rows[0].v, sel=r=>porHora?r.v:r.dv;
+  const ys=rows.map(r=>sel(r)?sel(r).v:null), cols=rows.map(r=>sel(r)&&sel(r).k==='f'?GOLD:BLUE);
+  const ep=rows.map(r=>sel(r)&&sel(r).hi!=null?sel(r).hi-sel(r).v:0), em=rows.map(r=>sel(r)&&sel(r).lo!=null?sel(r).v-sel(r).lo:0);
+  const base=ys.length?ys[0]:null;
+  plot('c-chart-cmp',[{x:labs,y:ys,type:'scatter',mode:'markers',marker:{color:cols,size:11,line:{color:SURF,width:2}},
+    error_y:{type:'data',symmetric:false,array:ep,arrayminus:em,color:GOLD,thickness:1.6,width:5},hovertemplate:'%{y:,.0f}<extra></extra>'}],
+    baseLayout({hovermode:'closest',xaxis:{type:'category',gridcolor:GRID,tickfont:{color:TXT}},
+      yaxis:{title:{text:'Cola '+q+' · '+(porHora?'TPH '+String(hh).padStart(2,'0')+':00':'total del día')},gridcolor:GRID,rangemode:'tozero',tickformat:'.2s',zeroline:false,tickfont:{color:TXT}},
+      shapes:base!=null?[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:base,y1:base,line:{color:'#76757F',width:1,dash:'dash'}}]:[]}));
+}
+function renderPerfilC(){
+  const q=CST.cola, d0=pdate($('c-perf-fecha').value||dstr(F0D));
+  $('c-perf-tit').textContent='Perfil horario comparado — cola '+q; $('c-perf-sub').textContent=fDia(d0)+' ('+DOWN[dow(d0)]+')';
+  const hrs=[...Array(24).keys()], xs=hrs.map(h=>String(h).padStart(2,'0')+':00'), tr=[];
+  const cur=hrs.map(h=>cHour(q,d0+h*HR));
+  if(cur.every(v=>v===undefined)){
+    plot('c-chart-perf',[],baseLayout({xaxis:{visible:false},yaxis:{visible:false},annotations:[{xref:'paper',yref:'paper',x:0.5,y:0.5,showarrow:false,text:'Sin detalle por hora para este día (disponible del '+dstr(CH0)+' al '+dstr(CHF-DAY)+')',font:{size:13,color:TXT}}]}));
+    return;
+  }
+  const prevs=[1,2,3,4].map(k=>hrs.map(h=>{const v=cHour(q,d0-k*7*DAY+h*HR); return v?v.v:null;}));
+  prevs.forEach((y,i)=>tr.push({x:xs,y:y,mode:'lines',line:{color:'#8B8A96',width:1},opacity:.7,name:'hace '+(i+1)+' sem',hovertemplate:'%{y:,.0f}<extra>hace '+(i+1)+' sem</extra>',connectgaps:false}));
+  const avg=hrs.map((h,i)=>{const a=prevs.map(p=>p[i]).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;});
+  tr.push({x:xs,y:avg,mode:'lines',line:{color:'#D8D7E0',width:1.5,dash:'dash'},name:'promedio 4 sem',hovertemplate:'%{y:,.0f}<extra>promedio 4 sem</extra>'});
+  const esF=cur.some(v=>v&&v.k==='f');
+  if(esF){ tr.push({x:xs,y:cur.map(v=>v?v.lo:null),mode:'lines',line:{width:0},hoverinfo:'skip'}); tr.push({x:xs,y:cur.map(v=>v?v.hi:null),mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip'}); }
+  tr.push({x:xs,y:cur.map(v=>v?v.v:null),mode:'lines+markers',line:{color:esF?GOLD:BLUE,width:2.5,dash:esF?'dot':'solid'},marker:{size:5},name:dstr(d0),hovertemplate:'%{y:,.0f}<extra>'+dstr(d0)+(esF?' (pronóstico)':' (real)')+'</extra>'});
+  plot('c-chart-perf',tr,baseLayout({yaxis:{title:{text:'Cola '+q+' · TPH'},gridcolor:GRID,rangemode:'tozero',tickformat:'.2s',zeroline:false,tickfont:{color:TXT}}}));
+}
+
+/* ---------- hilos por cola ---------- */
+const HL = CQ.hilos, HREF = HL.ref, HCAL = HL.cal;           // HREF por hora: [ráfaga, W P90 ms, factor P90, factor máx, coincide con el CSV, hilos por TPH (P90), hilos por TPH (máx)]
+const HST = {extra:0, hilos:HL.activos[CN[0]]||1, margen:0, w:null, crit:'p90', dia:0, desde:0, hasta:0};
+const ceilN = x => Math.ceil(x-0.005);                       // tolera las 2-11 transacciones por hora de diferencia entre la muestra y el CSV
+const estU = u => u>=0.8?'crit':(u>0.6?'warn':'good');
+const esMed = q => q===HL.medida;
+const zCrit = c => c==='max' ? HCAL.z_max : HCAL.z_p90;
+/* Cola medida (DEP): fórmula del Excel con las razones por hora de su muestra por segundo. */
+const hilosMed = (tph,h,c) => tph*HREF[h][c==='max'?6:5];
+/* Cola estimada: carga media L = TPS × tiempo promedio (× c_w por la hora más lenta) y salto por ráfagas L + z·√L,
+   con z medido en DEP. `w` es el tiempo promedio diario en ms. */
+function hilosEst(tph,w,c){ const L=tph/3600*w*HCAL.c_w/1000; return L+zCrit(c)*Math.sqrt(L); }
+function capEst(n,w,c){ const z=zCrit(c), s=(-z+Math.sqrt(z*z+4*n))/2; return s*s*3600*1000/(w*HCAL.c_w); }   // TPH con que se ocupan n hilos
+const wCola = q => HST.w!=null ? HST.w : HL.w[q][2];        // por defecto, el extremo alto del redondeo
+function hilosDe(tph,h){ const q=CST.cola, d=tph*(1+HST.extra), m=1+HST.margen;
+  if(!esMed(q)) return hilosEst(d,wCola(q),HST.crit)*m;
+  if(HST.w==null) return hilosMed(d,h,HST.crit)*m;
+  const r=HREF[h]; return d/3600*r[0]*HST.w/1000*(HST.crit==='max'?r[3]:r[2])*m; }
+const techoHora = v => v.k==='f' ? v.hi : v.v;              // demanda a dimensionar: real, o techo (P90) del pronóstico
+function hilosDia(q, d, fn){                                 // hora más exigente del día: por hora si hay detalle; si no, la hora pico del día
+  fn = fn || hilosDe;
+  if(cHour(q,d)!==undefined){
+    let best=null;
+    for(let h=0;h<24;h++){ const v=cHour(q,d+h*HR); if(!v) continue; const t=techoHora(v), r=fn(t,h); if(!best||r>best.req) best={req:r,h:h,k:v.k,tph:t}; }
+    return best;
+  }
+  const v=cDay(q,d); if(!v||v.peak==null||v.ph==null) return null;
+  const t=v.k==='f'?v.peak90:v.peak; return {req:fn(t,v.ph), h:v.ph, k:v.k, tph:t};
+}
+function resetSim(q){ HST.extra=0; HST.margen=0; HST.w=null; HST.crit='p90'; HST.hilos=HL.activos[q]||1; HST.dia=0;
+  $('h-extra').value=0; $('h-margen').value=0; $('h-w').value=''; $('h-crit').value='p90'; $('h-hilos').value=HST.hilos; }
+/* Los reportes redondean a 10 ms: un promedio menor a 5 ms solo dice que la cola es muy rápida. */
+const fW = q => { const w=HL.w[q]; return w[0]<5 ? '< 5 ms' : nf0.format(w[0])+' ms'; };
+
+function renderHilosTabla(filas, dias){
+  const picoRango=(q,fn)=>{ let m=null; dias.forEach(d=>{ const r=hilosDia(q,d,fn); if(r&&(!m||r.req>m.req)) m=r; }); return m; };
+  const rows=filas.filter(f=>HL.activos[f.q]!=null).map(f=>{ const q=f.q, n=HL.activos[q], w=HL.w[q], med=esMed(q);
+    const fn=(c,ww)=> med ? ((t,h)=>hilosMed(t,h,c)) : ((t,h)=>hilosEst(t,ww,c));
+    const p=picoRango(q,fn('p90',w[2])), m=picoRango(q,fn('max',w[2])), pl=med?p:picoRango(q,fn('p90',w[1]));
+    return {q:q,n:n,med:med,f:f,p:p?ceilN(p.req):null,pl:pl?Math.max(1,ceilN(pl.req)):null,m:m?ceilN(m.req):null,
+            carga:p?p.tph/3600*(med?w[0]:w[2]*HCAL.c_w)/1000:null}; });
+  rows.sort((a,b)=>(b.m||0)/b.n-(a.m||0)/a.n);
+  const uso=(v,n)=> v==null?'<td class="num">—</td>':'<td class="num" style="color:var(--'+(v/n>1?'crit':estU(v/n))+')">'+fPct(v/n)+'</td>';
+  let h='<thead><tr><th>Cola</th><th>Hilos activos</th><th>Tiempo promedio por transacción</th><th>Carga media en el pico</th><th>Hilos req. P90</th><th>Uso P90</th><th>Hilos req. máx.</th><th>Uso máx.</th></tr></thead><tbody>';
+  rows.forEach(r=>{ const q=r.q, sel=q===CST.cola;
+    const sobra=v=>v!=null&&v>HL.max?' <span class="tag" style="color:var(--crit);border-color:var(--crit)">supera '+HL.max+'</span>':'';
+    h+='<tr data-q="'+q+'" style="cursor:pointer'+(sel?';background:var(--brand-soft)':'')+'"><td><b>'+q+'</b></td><td class="num">'+r.n+'</td>'
+      +'<td class="num" title="pico de '+HL.w[q][3]+' transacciones en un segundo">'+fW(q)+'</td><td class="num">'+(r.carga==null?'—':nf1.format(r.carga)+' hilos')+'</td>'
+      +'<td class="num">'+(r.p==null?'—':(r.pl!=null&&r.pl<r.p?r.pl+'–'+r.p:r.p))+sobra(r.p)+'</td>'+uso(r.p,r.n)
+      +'<td class="num">'+(r.m==null?'—':r.m)+sobra(r.m)+'</td>'+uso(r.m,r.n)+'</tr>'; });
+  $('h-tabla').innerHTML=h+'</tbody>';
+  $('h-tabla-nota').textContent='Hilos requeridos en la hora más exigente del período, con la demanda real o el techo (P90) del pronóstico. '+HL.medida+': medido con su muestra por segundo del '+HL.fecha_muestra+'. Demás colas: estimado con el tiempo promedio del '+HL.fecha_tiempos+' (viene redondeado a 10 ms: se usa el extremo alto, y el rango en «Hilos req. P90» muestra el efecto del redondeo) y el salto por ráfagas medido en '+HL.medida+'. «Uso» = requeridos ÷ activos. ELM y VIS (1 hilo cada una) no tienen datos de transacciones.';
+}
+
+function renderSim(){
+  const q=CST.cola, n=HL.activos[q], med=esMed(q), w=HL.w[q], dias=daysIn(HST.desde,HST.hasta), x0=HST.desde, x1=HST.hasta+DAY;
+  $('h-titulo').textContent='Simulador de hilos — cola '+q;
+  $('h-txt').textContent='Mostrando la cola '+q+' '+rangoTxt(HST.desde,HST.hasta);
+  $('h-chart-sub').textContent='cola '+q+' · '+rangoTxt(HST.desde,HST.hasta);
+  $('h-modo').innerHTML = HST.w!=null ? '<span class="tag f">tiempo por transacción ingresado: '+nf0.format(HST.w)+' ms</span>'
+    : (med ? '<span class="tag r">medido · muestra del '+HL.fecha_muestra+'</span>' : '<span class="tag" style="color:var(--warn);border-color:var(--warn)">estimado · tiempo promedio '+fW(q)+' ('+HL.fecha_tiempos+')</span>');
+  $('h-leyenda').innerHTML = [['good','hasta 60%','holgado'],['warn','60–80%','ajustado'],['crit','80% o más','en riesgo de encolar']]
+    .map(x=>'<span><span class="tag" style="color:var(--'+x[0]+');border-color:var(--'+x[0]+')">'+x[1]+'</span> '+x[2]+'</span>').join('');
+  const real={x:[],y:[]}, fc={x:[],y:[]}; let mx=null;
+  dias.forEach(d=>{ const r=hilosDia(q,d), x=dstr(d); real.x.push(x); fc.x.push(x);
+    real.y.push(r&&r.k==='r'?ceilN(r.req):null); fc.y.push(r&&r.k==='f'?ceilN(r.req):null);
+    if(r&&(!mx||r.req>mx.req)) mx={req:r.req,d:d,h:r.h,k:r.k,tph:r.tph}; });
+  const z=zoneShapes(x0,x1);
+  z.sh.push({type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:HST.hilos,y1:HST.hilos,line:{color:'#F4F6F8',width:1.5,dash:'dash'}});
+  z.sh.push({type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:HL.max,y1:HL.max,line:{color:'#E5625E',width:1.5}});
+  const an=z.an.concat([{xref:'paper',yref:'y',x:1,y:HST.hilos,xanchor:'right',yanchor:'bottom',showarrow:false,text:HST.hilos+' hilos simulados',font:{size:10,color:TXT2}},
+    {xref:'paper',yref:'y',x:1,y:HL.max,xanchor:'right',yanchor:'bottom',showarrow:false,text:'máximo '+HL.max,font:{size:10,color:TXT2}}]);
+  plot('h-chart',[
+    {x:fc.x,y:fc.y,mode:'lines',name:'Pronóstico',line:{color:GOLD,width:2,dash:'dot',shape:'hv'},connectgaps:false,hovertemplate:'%{y} hilos<extra>Techo del pronóstico</extra>'},
+    {x:real.x,y:real.y,mode:'lines',name:'Real',line:{color:BLUE,width:2,shape:'hv'},connectgaps:false,hovertemplate:'%{y} hilos<extra>Demanda real</extra>'}],
+    baseLayout({shapes:z.sh,annotations:an,xaxis:{type:'date',range:[dstr(x0),dstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+      yaxis:{title:{text:'hilos requeridos en la hora más exigente'},gridcolor:GRID,range:[0,Math.max(HL.max,HST.hilos,mx?mx.req:0)*1.08],zeroline:false,tickfont:{color:TXT}}}));
+  const req=mx?ceilN(mx.req):null, u=req!=null?req/HST.hilos:null, min80=mx?ceilN(mx.req/0.8):null;
+  const bajo=(mx&&!med&&HST.w==null)?Math.max(1,ceilN(hilosEst(mx.tph*(1+HST.extra),w[1],HST.crit)*(1+HST.margen))):null;
+  const cards=[
+    ['Hilos requeridos (pico del período)', req!=null?String(req):'—', mx?dstr(mx.d)+' '+String(mx.h).padStart(2,'0')+':00 · '+(mx.k==='r'?'demanda real':'techo del pronóstico')+(bajo!=null&&bajo<req?' · entre '+bajo+' y '+req+' por el redondeo del tiempo':''):''],
+    ['Hilos simulados', String(HST.hilos), (n!=null?n+' activos hoy':'')+' · máximo '+HL.max],
+    ['Utilización en el pico', u!=null?fPct(u):'—', u==null?'':(u>=0.8?'en riesgo de encolar':(u>0.6?'ajustado':'holgado'))],
+    ['Holgura', req!=null?(HST.hilos-req)+' hilos':'—', req!=null&&HST.hilos-req<0?'déficit: faltan hilos':'hilos libres en el pico'],
+    ['Mínimo para no pasar de 80%', min80!=null?String(min80):'—', min80!=null&&min80>HL.max?'supera el máximo de '+HL.max:'hilos']
+  ];
+  $('h-kpis').innerHTML = cards.map((c,i)=>'<div class="kpi"><div class="k-label">'+esc(c[0])+'</div><div class="k-value num"'+(i===2&&u!=null?' style="color:var(--'+estU(u)+')"':'')+'>'+esc(c[1])+'</div><div class="k-sub">'+esc(c[2])+'</div></div>').join('');
+
+  /* detalle por hora del día elegido */
+  if(!HST.dia || cHour(q,HST.dia)===undefined){
+    let b=null; dias.forEach(d=>{ if(cHour(q,d)===undefined) return; const r=hilosDia(q,d); if(r&&(!b||r.req>b.req)) b={req:r.req,d:d}; });
+    HST.dia = b?b.d:F0D; $('h-dia').value=dstr(HST.dia);
+  }
+  const d0=HST.dia; let th='<thead><tr><th>Hora</th><th>Demanda TPH</th><th>'+(med?'TPS P90':'TPS promedio')+'</th><th>Tiempo por transacción usado</th><th>Capacidad TRX/h</th><th>Hilos requeridos</th><th>Utilización</th><th>Holgura</th></tr></thead><tbody>', cel='', noCo=[];
+  $('h-dia-sub').textContent = 'cola '+q+' · '+fDia(d0)+' ('+DOWN[dow(d0)]+') · '+tipoDia(d0)+(d0<F0D?' · real':' · techo del pronóstico');
+  /* hora pico del día: la de más hilos requeridos (si empatan, se resaltan todas; la tarjeta muestra la de más demanda) */
+  const reqH=[...Array(24).keys()].map(h=>{ const v=cHour(q,d0+h*HR); return v?{h:h,r:ceilN(hilosDe(techoHora(v),h)),t:techoHora(v)}:null; }).filter(Boolean);
+  const rMax=reqH.length?Math.max(...reqH.map(x=>x.r)):null, pk=reqH.filter(x=>x.r===rMax).sort((a,b)=>b.t-a.t)[0];
+  const esPico=h=>rMax!=null&&reqH.some(x=>x.h===h&&x.r===rMax);
+  if(pk){ const ut=rMax/HST.hilos, e=estU(ut), otras=reqH.filter(x=>x.r===rMax&&x.h!==pk.h).map(x=>String(x.h).padStart(2,'0')+':00');
+    $('h-pico').innerHTML='<div class="pico-dia" style="--c:var(--'+e+')"><span class="pico-et">Hora de mayor uso</span><b>'+String(pk.h).padStart(2,'0')+':00</b>'
+      +'<span class="num">'+fPct(ut)+'</span><span class="small">'+rMax+' de '+HST.hilos+' hilos · '+nf0.format(pk.t*(1+HST.extra))+' TPH'+(otras.length?' · igual en '+otras.join(', '):'')+'</span></div>'; }
+  else $('h-pico').innerHTML='';
+  for(let h=0;h<24;h++){ const v=cHour(q,d0+h*HR), hh=String(h).padStart(2,'0')+':00';
+    if(!v){ th+='<tr><td>'+hh+'</td><td colspan="7" class="small" style="text-align:left">'+(batchHour(d0+h*HR)?'ventana del batch':'sin dato')+'</td></tr>';
+      cel+='<div style="border:1px solid var(--border);border-radius:6px;padding:6px 4px;text-align:center;color:var(--text-muted)"><div class="small">'+hh+'</div><div class="num">—</div></div>'; continue; }
+    const tph=techoHora(v)*(1+HST.extra), r=ceilN(hilosDe(techoHora(v),h)), ut=r/HST.hilos, e=estU(ut);
+    const ws = med ? (HST.w!=null?HST.w:HREF[h][1]) : wCola(q), cap = med ? HST.hilos*1000/ws*3600 : capEst(HST.hilos,ws,HST.crit);
+    if(med && HST.w==null && !HREF[h][4]) noCo.push(hh);
+    const top=esPico(h);
+    th+='<tr'+(top?' class="fila-pico"':'')+'><td>'+hh+(top?' <span class="tag" style="color:var(--'+e+');border-color:var(--'+e+')">pico</span>':'')+'</td><td class="num">'+nf0.format(tph)+'</td><td class="num">'+nf1.format(tph/3600*(med?HREF[h][0]:1))+'</td><td class="num" title="'+(HST.w!=null?'valor ingresado':(med?'P90 medido en esa hora ('+HL.fecha_muestra+')':'promedio del '+HL.fecha_tiempos+' + 5 ms por redondeo'))+'">'+nf0.format(ws)+' ms</td><td class="num">'+nf0.format(cap)+'</td><td class="num">'+r+'</td><td class="num" style="color:var(--'+e+')">'+fPct(ut)+'</td><td class="num '+(HST.hilos-r<0?'neg':'')+'">'+(HST.hilos-r)+'</td></tr>';
+    cel+='<div class="hcel'+(top?' pico':'')+'" title="'+hh+': '+r+' hilos requeridos'+(top?' · hora de mayor uso del día':'')+'" style="--c:var(--'+e+')">'+(top?'<span class="hcel-et">pico</span>':'')+'<div class="small">'+hh+'</div><div class="num">'+nf0.format(ut*100)+'%</div></div>'; }
+  if(cHour(q,d0)===undefined){ th='<tbody><tr><td class="small" style="text-align:left">Sin detalle por hora para este día (disponible del '+dstr(CH0)+' al '+dstr(CHF-DAY)+').</td></tr>'; cel=''; $('h-pico').innerHTML=''; }
+  $('h-tabla-horas').innerHTML=th+'</tbody>'; $('h-calor').innerHTML=cel;
+  $('h-nota').textContent = (med
+      ? (HST.w==null ? 'Razones por hora (ráfaga, tiempo por transacción y concurrencia) medidas en '+HL.medida+' el '+HL.fecha_muestra+', un solo día. '+(noCo.length?'En las horas nocturnas ('+noCo.join(', ')+') la muestra no coincide con el conteo del CSV: tómalas como referencia. ':'')
+                     : 'Usa el tiempo por transacción ingresado en todas las horas, con la ráfaga y la relación con la concurrencia medidas en '+HL.medida+'. ')
+      : 'Cola estimada: carga media = TPS × tiempo promedio por transacción'+(HST.w==null?' del '+HL.fecha_tiempos+' ('+fW(q)+'; se usa '+nf0.format(w[2])+' ms, el extremo alto del redondeo)':' ingresado')+', aumentado '+nf0.format((HCAL.c_w-1)*100)+'% por la hora más lenta del día; a esa carga se le suma el salto por ráfagas medido en '+HL.medida+'. Aplicado a la propia '+HL.medida+', este método da entre 1,1 y 1,9 veces lo medido: tiende a pedir hilos de más, no de menos. Es un promedio de un solo día. ')
+    + 'El tiempo por transacción se supone constante al subir la carga; cerca de la saturación aumenta, así que conviene dejar margen. Fuera del detalle por hora, la curva usa la hora pico de cada día.';
+}
+
+/* ===================== REPOSTING ===================== */
+/* Datos por día de negocio (el reposting del día D corre en la madrugada de D+1). Dos bloques con su propio período:
+   panorama de todas las tablas (RPS) y detalle de una tabla (RDS). */
+const RP = DATA.reposting, RPK = PK.rep;
+const RT = RP.tablas, RET = RP.etiquetas;
+const RHI = new Map(RP.hd.map((d,i)=>[pdate(d),i])), RFI = new Map(RP.fd.map((d,i)=>[pdate(d),i]));
+const RDIAS = RP.hd.map(pdate).concat(RP.fd.map(pdate).filter(d=>!RHI.has(d))).sort((a,b)=>a-b);
+const RCUT = pdate(RP.ultimo)+DAY;                           // primer día de negocio sin dato real
+const RCOL = {IMG7:'#3D8FE0',IMG8:'#d95926',IMG4:'#199e70',IMG1:'#C28815',IMG2:'#8FB6C9'};
+const RMET = {trx:{nom:'Volumen',u:'TRX por noche',k:0}, tmin:{nom:'Tiempo',u:'minutos por noche',k:1}, ratio:{nom:'Ratio',u:'TRX por minuto',k:2}};
+const RMNOM = {estacional:'estacional', media60:'media de 60 días', lgbm:'LightGBM', mezcla:'mezcla LightGBM + estacional'};
+const RPS = {desde:0, hasta:0}, RDS = {tabla:RT[0], met:'trx', desde:0, hasta:0};
+const fHm = m => { if(m==null) return '—'; const h=Math.floor(Math.round(m)/60), mm=Math.round(m)%60; return h ? h+' h '+String(mm).padStart(2,'0')+' min' : mm+' min'; };
+const fRV = (m, v) => v==null ? '—' : (m==='trx' ? fT(v) : (m==='tmin' ? fHm(v) : nf1.format(v)));
+/* Valor de una tabla en un día: {k:'r'|'f', trx, tmin, ratio, y bandas *_lo/*_hi en el pronóstico}. */
+function rVal(t, d){
+  if(d<RCUT){ const i=RHI.get(d); if(i==null) return null; const h=RP.h[t];
+    return h[0][i]==null ? null : {k:'r', trx:h[0][i], tmin:h[1][i], ratio:h[2][i]}; }
+  const j=RFI.get(d); if(j==null) return null; const f=RP.f[t];
+  return {k:'f', trx:f[0][j], trx_lo:f[1][j], trx_hi:f[2][j], tmin:f[3][j], tmin_lo:f[4][j], tmin_hi:f[5][j], ratio:f[6][j], ratio_lo:f[7][j], ratio_hi:f[8][j]};
+}
+/* La noche completa: TRX de las tablas activas y duración de la tabla más lenta. */
+function nVal(d){
+  if(d<RCUT){ const i=RHI.get(d); if(i==null) return null; return {k:'r', trx:RP.hn[0][i], tmin:RP.hn[1][i], lenta:RP.hn[2][i]}; }
+  const j=RFI.get(d); if(j==null) return null; const f=RP.fn;
+  return {k:'f', trx:f[0][j], trx_lo:f[1][j], trx_hi:f[2][j], tmin:f[3][j], tmin_lo:f[4][j], tmin_hi:f[5][j], lenta:f[6][j]};
+}
+const rDias = (a,b) => RDIAS.filter(d=>d>=a&&d<=b);
+function rRango(st, n, idD, idH){
+  if(n==='all'){ st.desde=RDIAS[0]; st.hasta=RDIAS[RDIAS.length-1]; }
+  else [st.desde, st.hasta] = desdeHoy(n);
+  $(idD).value=dstr(st.desde); $(idH).value=dstr(st.hasta);
+}
+const rPrev = d => d-364*DAY;                                // mismo día de la semana del año anterior
+const media = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
+const mediana = a => { if(!a.length) return null; const s=a.slice().sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+function rLineaCorte(x0,x1){ return (RCUT>x0&&RCUT<=x1) ? [{type:'line',xref:'x',yref:'paper',x0:tstr(RCUT-12*HR),x1:tstr(RCUT-12*HR),y0:0,y1:1,line:{color:'#76757F',width:1.5,dash:'dash'}}] : []; }
+/* Zonas del pronóstico (mismas que el resto del tablero), sin la línea de corte de TPH: Reposting tiene la suya. */
+function rZonas(x0,x1){ const z=zoneShapes(x0,x1); z.sh=z.sh.filter(s=>s.type!=='line').concat(rLineaCorte(x0,x1)); return z; }
+
+/* ---------- bloque 1: panorama ---------- */
+function renderPanoramaR(){
+  const dias=rDias(RPS.desde,RPS.hasta), txt=rangoTxt(RPS.desde,RPS.hasta);
+  $('rp-txt').textContent='Mostrando '+txt;
+  $('rp-stack-sub').textContent=txt; $('rp-noche-sub').textContent=txt; $('rp-tabla-sub').textContent=txt;
+  renderKpisRP(dias); renderPicosRP(); renderStackR(dias); renderNocheR(dias); renderTablaRP(dias);
+}
+function renderKpisRP(dias){
+  const ns=dias.map(nVal).filter(v=>v&&v.trx!=null), dur=dias.map(d=>[d,nVal(d)]).filter(x=>x[1]&&x[1].tmin!=null);
+  const tot=ns.reduce((s,v)=>s+v.trx,0), nr=ns.filter(v=>v.k==='r').length;
+  const prev=dias.map(d=>nVal(rPrev(d))).filter(v=>v&&v.k==='r'&&v.trx!=null).map(v=>v.trx);
+  const pm=ns.length?tot/ns.length:null, pp=media(prev);
+  const lg=dur.reduce((a,x)=>(!a||x[1].tmin>a[1].tmin)?x:a,null);
+  $('rp-kpis').innerHTML=kpiHtml([
+    ['Transacciones del período', ns.length?fM(tot):'—', ns.length+' noches ('+nr+' reales, '+(ns.length-nr)+' pronosticadas)'],
+    ['Promedio por noche', fT(pm), pp?((pm/pp-1>=0?'+':'')+nf1.format((pm/pp-1)*100)+'% frente a las mismas fechas del año anterior'):'sin datos del año anterior para comparar'],
+    ['Duración típica de la noche', fHm(mediana(dur.map(x=>x[1].tmin))), 'mediana del período'],
+    ['Noche más larga del período', lg?fHm(lg[1].tmin):'—', lg?fFechaDia(dstr(lg[0]))+' · '+(lg[1].lenta||'')+(lg[1].k==='f'?' · pronóstico':''):'']
+  ]);
+}
+function renderPicosRP(){
+  const P=RPK.total.todo;
+  $('rp-picos').innerHTML=kpiHtml([
+    ['Noche con más transacciones (historial)', fT(P.trx), fFechaDia(P.dia)+' · tablas activas'],
+    ['Noche más larga (historial)', fHm(P.tmin), fFechaDia(P.dia_tmin)]
+  ]);
+}
+function renderStackR(dias){
+  const xs=[], op=[], ys={}; RT.forEach(t=>ys[t]=[]);
+  dias.forEach(d=>{ const vs=RT.map(t=>rVal(t,d)); if(vs.some(v=>!v||v.trx==null)) return;
+    xs.push(dstr(d)); op.push(vs[0].k==='r'?1:0.55); RT.forEach((t,i)=>ys[t].push(vs[i].trx)); });
+  const fino=xs.length>70, x0=RPS.desde, x1=RPS.hasta+DAY, z=rZonas(x0,x1), ann=z.an.slice();
+  lineasPico(z.sh, ann, [[RPK.total.todo.trx, 'Pico histórico: '+fT(RPK.total.todo.trx)]]);
+  const tr=RT.map(t=>({type:'bar',name:t,x:xs,y:ys[t],marker:{color:RCOL[t],opacity:op,line:{color:SURF,width:fino?0:1}},hovertemplate:'%{y:,.0f}<extra>'+t+'</extra>'}));
+  plot('rp-stack',tr,baseLayout({barmode:'stack',bargap:fino?0.05:0.18,shapes:z.sh,annotations:ann,xaxis:{type:'date',range:[tstr(x0),tstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:'TRX por noche'},gridcolor:GRID,rangemode:'tozero',tickformat:'.3s',zeroline:false,tickfont:{color:TXT}}}));
+  $('rp-stack-leg').innerHTML=RT.map(t=>'<span><i class="swatch" style="height:10px;width:12px;border:none;background:'+RCOL[t]+'"></i> '+t+' · '+esc(RET[t])+'</span>').join('')
+    +'<span>Color pleno = real · tenue = pronóstico</span>';
+}
+function renderNocheR(dias){
+  const x0=RPS.desde, x1=RPS.hasta+DAY, real={x:[],y:[],c:[]}, fc={x:[],y:[],lo:[],hi:[],c:[]};
+  dias.forEach(d=>{ const v=nVal(d), x=tstr(d+12*HR); const r=v&&v.k==='r'?v:null, f=v&&v.k==='f'?v:null;
+    real.x.push(x); real.y.push(r?r.tmin:null); real.c.push(r?r.lenta:'');
+    fc.x.push(x); fc.y.push(f?f.tmin:null); fc.lo.push(f?f.tmin_lo:null); fc.hi.push(f?f.tmin_hi:null); fc.c.push(f?f.lenta:''); });
+  const z=rZonas(x0,x1), ann=z.an.slice();
+  lineasPico(z.sh, ann, [[RPK.total.todo.tmin, 'Pico histórico: '+fHm(RPK.total.todo.tmin)]]);
+  const tr=[
+    {x:fc.x,y:fc.lo,mode:'lines',line:{width:0},hoverinfo:'skip',connectgaps:false},
+    {x:fc.x,y:fc.hi,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip',connectgaps:false},
+    {x:fc.x,y:fc.y,customdata:fc.c,mode:'lines',line:{color:GOLD,width:2,dash:'dot'},connectgaps:false,hovertemplate:'%{y:.0f} min · %{customdata}<extra>Pronóstico</extra>'},
+    {x:real.x,y:real.y,customdata:real.c,mode:'lines',line:{color:BLUE,width:2},connectgaps:false,hovertemplate:'%{y:.0f} min · %{customdata}<extra>Real</extra>'}];
+  plot('rp-noche',tr,baseLayout({shapes:z.sh,annotations:ann,xaxis:{type:'date',range:[tstr(x0),tstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:'minutos'},gridcolor:GRID,rangemode:'tozero',zeroline:false,tickfont:{color:TXT}}}));
+}
+function renderTablaRP(dias){
+  const filas=RT.map(t=>{ const vs=dias.map(d=>[d,rVal(t,d)]).filter(x=>x[1]&&x[1].trx!=null);
+    const prev=dias.map(d=>rVal(t,rPrev(d))).filter(v=>v&&v.k==='r'&&v.trx!=null).map(v=>v.trx);
+    const pk=vs.reduce((a,x)=>(!a||x[1].trx>a[1].trx)?x:a,null);
+    return {t:t, tot:vs.reduce((s,x)=>s+x[1].trx,0), n:vs.length, prev:media(prev), pk:pk,
+      ratio:media(vs.map(x=>x[1].ratio).filter(v=>v!=null)), tmin:media(vs.map(x=>x[1].tmin).filter(v=>v!=null))}; });
+  const total=filas.reduce((s,f)=>s+f.tot,0);
+  let h='<thead><tr><th>Tabla</th><th>Promedio TRX por noche</th><th>% del total</th><th>Vs. año anterior</th><th>Ratio (TRX/min)</th><th>Tiempo promedio</th><th>Noche pico</th></tr></thead><tbody>';
+  filas.forEach(f=>{ const sel=f.t===RDS.tabla, pm=f.n?f.tot/f.n:null;
+    h+='<tr data-t="'+f.t+'" style="cursor:pointer'+(sel?';background:var(--brand-soft)':'')+'"><td><b>'+f.t+'</b> · '+esc(RET[f.t])+'</td>'
+      +'<td class="num">'+fT(pm)+'</td><td class="num">'+fPct(total?f.tot/total:null)+'</td>'+tdPct(pm&&f.prev?pctDif(pm,f.prev):null)
+      +'<td class="num">'+(f.ratio!=null?nf0.format(f.ratio):'—')+'</td><td class="num">'+fHm(f.tmin)+'</td>'
+      +'<td class="num">'+(f.pk?fT(f.pk[1].trx)+' · '+fDia(f.pk[0]):'—')+'</td></tr>'; });
+  Object.entries(RP.inactivas).forEach(([t,m])=>{ h+='<tr style="color:var(--text-muted)"><td><b>'+t+'</b> · '+esc(RET[t])+'</td><td colspan="6" style="text-align:left">Sin pronóstico: '+esc(m)+' (pronóstico 0)</td></tr>'; });
+  $('rp-tabla').innerHTML=h+'</tbody>';
+}
+
+/* ---------- bloque 2: detalle de una tabla ---------- */
+function renderTablaR(){
+  const t=RDS.tabla, m=RDS.met, M=RMET[m], dias=rDias(RDS.desde,RDS.hasta), x0=RDS.desde, x1=RDS.hasta+DAY;
+  const txt=rangoTxt(RDS.desde,RDS.hasta);
+  $('rd-txt').textContent='Mostrando '+t+' '+txt;
+  $('rd-titulo').textContent=t+' · '+RET[t]+' — '+M.nom.toLowerCase();
+  $('rd-sub').textContent=txt+' · '+dias.length+' noches';
+  $('rd-lead').textContent={trx:'Transacciones procesadas por noche, reales y pronosticadas.', tmin:'Minutos que tarda la tabla cada noche. En los días pronosticados es volumen ÷ ratio.', ratio:'Ratio: transacciones por minuto, la velocidad con que la tabla procesa su volumen.'}[m];
+  $('rd-dias-tit').textContent='Resumen por día — '+t; $('rd-dias-sub').textContent=txt;
+  const esc_=RP.escalones[t]||[], met=RP.metodos[t];
+  $('rd-nota').textContent='Método de pronóstico: volumen '+(RMNOM[met.trx]||met.trx)+'; ratio '+(RMNOM[met.ratio]||met.ratio)+'. '
+    +(esc_.length?'Cambio de nivel el '+esc_.map(e=>fDia(pdate(e))).join(', ')+' (causa sin confirmar): el histórico anterior se llevó al nivel nuevo para entrenar y la banda se amplió 1,5 veces.':'');
+  const real={x:[],y:[]}, fc={x:[],y:[],lo:[],hi:[]};
+  dias.forEach(d=>{ const v=rVal(t,d), x=tstr(d+12*HR);
+    real.x.push(x); real.y.push(v&&v.k==='r'?v[m]:null);
+    fc.x.push(x); fc.y.push(v&&v.k==='f'?v[m]:null); fc.lo.push(v&&v.k==='f'?v[m+'_lo']:null); fc.hi.push(v&&v.k==='f'?v[m+'_hi']:null); });
+  const z=rZonas(x0,x1), ann=z.an.slice();
+  esc_.forEach(e=>{ const ms=pdate(e); if(ms>=x0&&ms<x1) z.sh.push({type:'line',xref:'x',yref:'paper',x0:tstr(ms),x1:tstr(ms),y0:0,y1:1,line:{color:'#F08C3A',width:1.5,dash:'dot'}}); });
+  { /* Como en colas: si la tabla cambió de nivel, solo el pico desde el cambio (el anterior aplanaría la serie). */
+    const P=RPK.tablas[t], p=P.desde||P.todo, et=P.desde?'Pico actual: ':'Pico histórico: ';
+    if(m==='trx') lineasPico(z.sh, ann, [[p.trx, et+fT(p.trx)]]);
+    if(m==='tmin') lineasPico(z.sh, ann, [[p.tmin, et+fHm(p.tmin)]]); }
+  const fmt=m==='trx'?'%{y:,.0f}':'%{y:,.1f}';
+  const tr=[
+    {x:fc.x,y:fc.lo,mode:'lines',line:{width:0},hoverinfo:'skip',connectgaps:false},
+    {x:fc.x,y:fc.hi,mode:'lines',line:{width:0},fill:'tonexty',fillcolor:BAND,hoverinfo:'skip',connectgaps:false},
+    {x:fc.x,y:fc.y,mode:'lines',line:{color:GOLD,width:2,dash:'dot'},connectgaps:false,hovertemplate:fmt+'<extra>Pronóstico</extra>'},
+    {x:real.x,y:real.y,mode:'lines',line:{color:BLUE,width:2},connectgaps:false,hovertemplate:fmt+'<extra>Real</extra>'}];
+  plot('rd-chart',tr,baseLayout({shapes:z.sh,annotations:ann,xaxis:{type:'date',range:[tstr(x0),tstr(x1)],gridcolor:GRID,linecolor:'#363640',tickfont:{color:TXT}},
+    yaxis:{title:{text:M.u},gridcolor:GRID,rangemode:'tozero',tickformat:m==='trx'?'.3s':'',zeroline:false,tickfont:{color:TXT}}}));
+  renderKpisRD(dias); renderPicosRD(); renderDiasRD(dias);
+}
+function renderKpisRD(dias){
+  const t=RDS.tabla, vs=dias.map(d=>[d,rVal(t,d)]).filter(x=>x[1]&&x[1].trx!=null), nr=vs.filter(x=>x[1].k==='r').length;
+  const tot=vs.reduce((s,x)=>s+x[1].trx,0), tm=vs.filter(x=>x[1].tmin!=null), lg=tm.reduce((a,x)=>(!a||x[1].tmin>a[1].tmin)?x:a,null);
+  $('rd-kpis').innerHTML=kpiHtml([
+    ['Transacciones del período', vs.length?fM(tot):'—', vs.length+' noches ('+nr+' reales, '+(vs.length-nr)+' pronosticadas)'],
+    ['Promedio por noche', vs.length?fT(tot/vs.length):'—', 'tabla '+t+' · '+RET[t]],
+    ['Ratio promedio', vs.length?nf0.format(media(vs.map(x=>x[1].ratio).filter(v=>v!=null)))+' TRX/min':'—', 'transacciones por minuto'],
+    ['Tiempo promedio por noche', fHm(media(tm.map(x=>x[1].tmin))), lg?'máximo '+fHm(lg[1].tmin)+' el '+fFechaDia(dstr(lg[0])):'']
+  ]);
+}
+function renderPicosRD(){
+  const t=RDS.tabla, P=RPK.tablas[t], cards=[];
+  const par=(p,et)=>{ cards.push(['Noche con más transacciones '+et, fT(p.trx), fFechaDia(p.dia)]); cards.push(['Noche más larga '+et, fHm(p.tmin), fFechaDia(p.dia_tmin)]); };
+  par(P.todo, '· historial'+(P.desde?'':' de '+t));
+  if(P.desde) par(P.desde, 'desde el cambio de nivel ('+fMes(pdate(P.cambio))+')');
+  $('rd-picos').innerHTML=kpiHtml(cards);
+}
+function renderDiasRD(dias){
+  const t=RDS.tabla, B=(v,m)=>v[m+'_lo']!=null?fRV(m,v[m+'_lo'])+' – '+fRV(m,v[m+'_hi']):'—';
+  let h='<thead><tr><th>Día de negocio</th><th>Día</th><th>Tipo de día</th><th>Fuente</th><th>TRX</th><th>Banda TRX 10–90%</th><th>Tiempo</th><th>Banda tiempo 10–90%</th><th>Ratio (TRX/min)</th></tr></thead><tbody>';
+  dias.slice(0,400).forEach(d=>{ const v=rVal(t,d);
+    h+='<tr><td>'+dstr(d)+'</td><td>'+DOWN[dow(d)]+'</td><td>'+tipoDiaLargo(d)+'</td>';
+    if(!v){ h+='<td colspan="6" class="small" style="text-align:left">sin corrida registrada o excluida (ver «Cómo leer»)</td></tr>'; return; }
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span></td><td class="num">'+fT(v.trx)+'</td><td class="num">'+B(v,'trx')+'</td><td class="num">'+fHm(v.tmin)+'</td><td class="num">'+B(v,'tmin')+'</td><td class="num">'+(v.ratio!=null?nf0.format(v.ratio):'—')+'</td></tr>'; });
+  $('rd-dias').innerHTML=h+'</tbody>';
+}
+/* Comparar la tabla por tipo de día: misma lógica que las demás pestañas (serieCmp), sin fin de semana ni feriado. */
+function renderCmpR(){
+  const t=RDS.tabla, m=RDS.met, d0=pdate($('rd-cmp-fecha').value||dstr(RCUT)), tp=$('rd-cmp-tipo').value;
+  const R=serieCmp(tp,d0,'ambos');
+  $('rd-cmp-tit').textContent='Comparar una noche con las siguientes del mismo tipo — '+t;
+  $('rd-cmp-sub').textContent='base: día de negocio '+fDia(d0)+' ('+DOWN[dow(d0)]+') · '+RMET[m].nom.toLowerCase();
+  $('rd-cmp-nota').textContent=R.nota;
+  const rows=R.filas.map(f=>Object.assign({}, f, {v:f.d!=null?rVal(t,f.d):null})), labs=rows.map(r=>r.lab);
+  const bv=k=>rows.length&&rows[0].v?rows[0].v[k]:null;
+  let h='<thead><tr><th>Comparación</th><th>Día de negocio</th><th>Tipo de día</th><th>Fuente</th><th>TRX</th><th>Banda TRX 10–90%</th><th>TRX vs. base</th><th>Tiempo</th><th>Tiempo vs. base</th><th>Ratio (TRX/min)</th></tr></thead><tbody>';
+  rows.forEach((r,i)=>{ const v=r.v; h+='<tr><td>'+labs[i]+'</td>';
+    if(r.d==null){ h+='<td colspan="9" class="small" style="text-align:left">no hay un día de este tipo en ese período, o queda fuera del calendario disponible</td></tr>'; return; }
+    h+='<td>'+dstr(r.d)+' ('+DOWN[dow(r.d)]+')</td><td>'+tipoDiaLargo(r.d)+'</td>';
+    if(!v){ h+='<td colspan="7" class="small" style="text-align:left">sin dato (sin corrida registrada o fuera del pronóstico)</td></tr>'; return; }
+    h+='<td><span class="tag '+v.k+'">'+(v.k==='r'?'real':'pronóstico')+'</span></td><td class="num">'+fT(v.trx)+'</td><td class="num">'+(v.trx_lo!=null?fT(v.trx_lo)+' – '+fT(v.trx_hi):'—')+'</td>'
+      +tdPct(i?pctDif(v.trx,bv('trx')):null)+'<td class="num">'+fHm(v.tmin)+'</td>'+tdPct(i?pctDif(v.tmin,bv('tmin')):null)+'<td class="num">'+(v.ratio!=null?nf0.format(v.ratio):'—')+'</td></tr>'; });
+  $('rd-tabla-cmp').innerHTML=h+'</tbody>';
+  const ys=rows.map(r=>r.v?r.v[m]:null), cols=rows.map(r=>r.v&&r.v.k==='f'?GOLD:BLUE);
+  const ep=rows.map(r=>r.v&&r.v[m+'_hi']!=null?r.v[m+'_hi']-r.v[m]:0), em=rows.map(r=>r.v&&r.v[m+'_lo']!=null?r.v[m]-r.v[m+'_lo']:0), base=bv(m);
+  plot('rd-chart-cmp',[{x:labs,y:ys,type:'bar',marker:{color:cols,line:{color:SURF,width:2}},width:0.5,error_y:{type:'data',symmetric:false,array:ep,arrayminus:em,color:GOLD,thickness:1.4,width:5},hovertemplate:(m==='trx'?'%{y:,.0f}':'%{y:,.1f}')+'<extra></extra>'}],
+    baseLayout({hovermode:'closest',xaxis:{type:'category',gridcolor:GRID,tickfont:{color:TXT}},yaxis:{title:{text:t+' · '+RMET[m].u},gridcolor:GRID,rangemode:'tozero',tickformat:m==='trx'?'.3s':'',zeroline:false,tickfont:{color:TXT}},
+      shapes:base!=null?[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:base,y1:base,line:{color:'#76757F',width:1,dash:'dash'}}]:[]}));
+}
+
+/* ===================== textos y estado ===================== */
+function textos(){
+  $('generado').textContent=DATA.generado;
+  $('tph-about').innerHTML =
+   '<div><h3>Modelo</h3><p>Un modelo por serie sobre calendario (hora, día, feriados, fin de mes, batch) y un indicador de régimen.</p></div>'
+  +'<div><h3>Zonas de confianza</h3><ul><li><b>Días 1–90</b>: confiable.</li><li><b>91–180</b>: referencia.</li><li><b>181–365</b>: indicativa; asume el nivel actual.</li></ul></div>'
+  +'<div><h3>Lo que el modelo no sabe</h3><ul><li>La caída de ~20% de No Financiero (feb–mar 2026) no tiene causa conocida ni se puede anticipar.</li><li>La estacionalidad anual se aprende de un solo año.</li><li>Financiero asume crecimiento (+21% anual) que puede frenarse.</li></ul></div>'
+  +'<div><h3>Datos y huecos</h3><ul><li>Datos desde 2024-12-19; los 14 días sin datos quedan vacíos.</li><li>17 días con desvío de tráfico entre colas inflan No Financiero (hasta +48%): se muestran, pero no entrenan el modelo.</li><li>23:00–01:59 en noches laborables: ventana del batch, sin dato.</li></ul></div>';
+  $('p-about').innerHTML =
+   '<div><h3>Modelo</h3><p>Duración = nivel de las últimas 8 semanas × efecto del día de la semana × efecto del primer y del último día hábil del mes × volumen financiero previsto del día (salvo lond0501cm). Para cfpd0111cm solo se usan datos desde el quiebre de junio de 2026 (el primer día ya no acumula); sus bandas salen de backtests posteriores al quiebre. El inicio se encadena desde el Lote1; bnccrn2dcm arranca tras lond0501cm (con una espera de ~1 h por pasos que no están en los datos) y bncd0801, incorporado en oct-2026, tiene inicio propio porque no sigue a la cadena. Registros contables = razón reciente (≈ 3,07) × financieras pronosticadas; no entra al modelo de duración porque no mejora su error.</p></div>'
+  +'<div><h3>Zonas de confianza</h3><ul><li><b>1–90 días</b>: confiable. <b>91–180</b>: intermedia. <b>181–365</b>: indicativa.</li></ul></div>'
+  +'<div><h3>Lo que el modelo no sabe</h3><ul><li>Cambios de nivel sin causa conocida (depd0800cm en julio, cfpd0111cm en marzo y agosto de 2026).</li><li>Inicio: error medio de ~16 a ~35 min.</li><li>No hay pronóstico en fines de semana ni feriados.</li></ul></div>'
+  +'<div><h3>Calidad de los datos</h3><ul><li>Verificado contra la bitácora RITM1037408 (27-jul a 10-sep de 2026): 202 de 202 líneas emparejadas.</li><li>Antes del 27-jul no hay bitácora; pueden quedar fechas desfasadas.</li></ul></div>';
+  $('c-about').innerHTML =
+   '<div><h3>Modelo</h3><p>Las mismas transacciones de la pestaña TXN Financieras y No Financieras, repartidas por cola. Cada cola combina un modelo de calendario con su perfil de las últimas 8 semanas, y cada día se ajusta para que la suma de colas sea el total pronosticado en esa pestaña. FN1, DP4, OLR y VST (menos de 0,02% del volumen cada una) usan solo el perfil; SDV no tiene actividad y no se muestra.</p></div>'
+  +'<div><h3>Zonas de confianza</h3><ul><li><b>Días 1–90</b>: confiable, con detalle por hora.</li><li><b>91–365</b>: solo por día; indicativo.</li><li>Error diario típico a 90 días: 5–9% en las colas grandes, ~14% en OMN y CI3.</li></ul></div>'
+  +'<div><h3>Lo que el modelo no sabe</h3><ul><li>Supone que el <b>enrutamiento actual se mantiene</b>. Entre nov-2025 y mar-2026 cambió seis veces (OMN y CI3 bajaron, OM2 subió; en marzo CI1 y OM1 cayeron a menos de la mitad). Un cambio nuevo invalida el reparto aunque el total siga bien.</li><li><b>Desvíos temporales</b>: una o dos veces al mes OMN y CI3 reciben 2 a 3 veces su volumen normal durante un día. No se pueden anticipar y quedan fuera de la banda: para la capacidad de esas colas, mirar «máximo 12 meses».</li><li>Al ajustarse al total, las colas heredan los errores del pronóstico de TPH.</li></ul></div>'
+  +'<div><h3>Hilos por cola</h3><ul><li><b>DEP es la única cola medida</b>: un día segundo a segundo (15-sep-2026) da su tiempo por transacción y su concurrencia; coincide con el conteo por hora de 06:00 a 19:00.</li><li>Las demás colas se estiman con su tiempo promedio por transacción de 30 días laborables (1-sep al 13-oct-2026; cada día viene redondeado a 10 ms, así que se usa el extremo alto) y con el salto por ráfagas medido en DEP. Probado sobre la propia DEP, el estimado da entre 1,1 y 1,9 veces lo medido.</li><li>El dimensionamiento es al P90: con esos hilos puede haber cola breve en los instantes más cargados. El criterio «concurrencia máxima» es el estricto.</li></ul></div>'
+  +'<div><h3>Datos y bandas</h3><ul><li>Misma fuente y mismos huecos que TPH: la suma de colas coincide con Financiero + No Financiero en todas las horas.</li><li>Las bandas salen de pruebas hechas desde abril de 2026 (régimen actual), con horizontes de hasta 180 días; el tramo 181–365 se ensancha por extrapolación.</li></ul></div>';
+  $('r-about').innerHTML =
+   '<div><h3>Modelo</h3><p>Por tabla se pronostican el volumen (TRX) y el ratio (TRX por minuto); el tiempo es volumen ÷ ratio. Compitieron cuatro métodos en pruebas con 11 cortes mensuales (sep-2025 a jul-2026) y en cada tabla quedó el de menor error a 1–90 días: estacional (últimas 4 semanas × tendencia × efecto de inicio y cierre de mes, víspera de feriado, 24 y 31-dic), media de 60 días, LightGBM o la mezcla de LightGBM y estacional. El ratio usa la media de 60 días en todas las tablas.</p></div>'
+  +'<div><h3>Zonas de confianza</h3><ul><li><b>Días 1–90</b>: confiable. <b>91–180</b>: intermedia. <b>181–365</b>: indicativa.</li><li>Error diario de volumen en las pruebas: 16–23% según la tabla (13–20% por semana).</li><li>Frente a lo real del 28-sep al 5-oct-2026: 8,7% de error de volumen y 28 de 30 datos dentro de la banda.</li></ul></div>'
+  +'<div><h3>Lo que el modelo no sabe</h3><ul><li>El <b>cambio de nivel del 7-sep-2026</b> (IMG4 sube, IMG8 baja) no tiene causa confirmada; hay pocas semanas del nivel nuevo y su banda se amplió 1,5 veces.</li><li>El 24 y el 31-dic se estiman con solo 2 eventos.</li><li>IMG3, IMG5 e IMG6 no tienen actividad: pronóstico 0.</li></ul></div>'
+  +'<div><h3>Datos y fechas</h3><ul><li>El reposting del día hábil D corre en la madrugada de D+1. Hasta el 21-jul-2025 el archivo registraba la fecha de ejecución; se pasó al día hábil anterior.</li><li>Se excluyen copias de otro día, depuraciones y pruebas anotadas, corridas de fin de semana sin confirmar y volúmenes repetidos del día anterior; el detalle está en reposting_excluidas.csv.</li></ul></div>';
+}
+
+/* ===================== onda decorativa del encabezado ===================== */
+function drawWave(){
+  const wp=(base,amp,freq,ph,tilt)=>{ let d=''; for(let k=0;k<=60;k++){ const x=k*20, y=base+amp*Math.sin(x*freq+ph)+amp*0.45*Math.sin(x*freq*2.3+ph*1.7)+tilt*(x/1200); d+=(k?'L':'M')+x.toFixed(1)+','+y.toFixed(1); } return d; };
+  let out='';
+  [{c:'#3D8FE0',base:62,amp:24,freq:0.0042,ph:0.6,tilt:-16},{c:'#F2B233',base:54,amp:20,freq:0.0036,ph:2.4,tilt:22}].forEach(h=>{
+    for(let i=0;i<14;i++){ const op=(0.18+0.5*(1-Math.abs(i-7)/7)).toFixed(2);
+      out+='<path d="'+wp(h.base+i*1.6,h.amp-i*0.6,h.freq,h.ph+i*0.07,h.tilt)+'" fill="none" stroke="'+h.c+'" stroke-width="1" stroke-opacity="'+op+'" vector-effect="non-scaling-stroke"/>'; } });
+  $('wave').innerHTML=out;
+}
+
+/* ===================== inicialización ===================== */
+function seg(id, fn){ const el=$(id); el.addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; [...el.children].forEach(x=>x.classList.remove('active')); b.classList.add('active'); fn(b); }); }
+function init(){
+  textos();
+  document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));
+    document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+b.dataset.tab));
+    setTimeout(()=>{ document.querySelectorAll('.tabpanel.active .chart-area').forEach(el=>{ try{Plotly.Plots.resize(el);}catch(e){} }); },60);
+  }));
+  const setVista=bw=>{ document.body.classList.toggle('bw',bw); $('btn-bw').classList.toggle('active',bw); $('btn-color').classList.toggle('active',!bw); };
+  $('btn-bw').addEventListener('click',()=>setVista(true)); $('btn-color').addEventListener('click',()=>setVista(false));
+  drawWave();
+
+  /* TPH */
+  const hs=$('cmp-hora'); for(let h=0;h<24;h++){ const o=document.createElement('option'); o.value=h; o.textContent=String(h).padStart(2,'0')+':00'; hs.appendChild(o); } hs.value=11;
+  $('cmp-fecha').value=dstr(F0D+3*DAY); $('perf-fecha').value=dstr(F0D+3*DAY);
+  setRango(7);
+  seg('tph-serie',b=>{ ST.serie=b.dataset.v; renderTph(); renderCmp(); renderPerfil(); });
+  seg('tph-res',b=>{ ST.res=b.dataset.v; renderTph(); });
+  seg('tph-rango',b=>{ setRango(b.dataset.n); renderTph(); });
+  const dch=()=>{ const a=pdate($('tph-desde').value), b=pdate($('tph-hasta').value); if(isNaN(a)||isNaN(b)||b<a) return; ST.desde=a; ST.hasta=b; [...$('tph-rango').children].forEach(x=>x.classList.remove('active')); renderTph(); };
+  $('tph-desde').addEventListener('change',dch); $('tph-hasta').addEventListener('change',dch);
+  llenarTipos($('cmp-tipo'), false); llenarTipos($('p-cmp-tipo'), true);
+  ['cmp-fecha','cmp-hora','cmp-tipo','cmp-finde'].forEach(id=>$(id).addEventListener('change',renderCmp));
+  $('p-cmp-tipo').addEventListener('change',()=>renderCmpP());
+  $('perf-fecha').addEventListener('change',renderPerfil);
+  renderTph(); renderCmp(); renderPerfil();
+
+  /* Procesos */
+  [['p-sub','sub'],['p-cmp-s','cmp']].forEach(c=>{
+    const el=$(c[0]); SUBS.forEach((s,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=SNOM[s]; el.appendChild(o); });
+    const ot=document.createElement('option'); ot.value=TOT; ot.textContent=SNOM.depd0800cm_total; el.appendChild(ot);
+    el.value=PST[c[1]];
+    el.addEventListener('change',()=>{ PST[c[1]]=+el.value; if(c[1]==='sub') renderDur(); else renderCmpP(); });
+  });
+  PST.dia=allDays.find(d=>fcDays.has(d)&&!histDays.has(d))||allDays[allDays.length-1]; $('p-fecha').value=PST.dia;
+  const pr=n=>{ if(n==='all'){PST.desde=pdate(allDays[0]); PST.hasta=pdate(allDays[allDays.length-1]);} else [PST.desde, PST.hasta] = desdeHoy(n); $('p-desde').value=dstr(PST.desde); $('p-hasta').value=dstr(PST.hasta); };
+  pr(180);
+  seg('p-rango',b=>{ pr(b.dataset.n); renderPeriodo(); });
+  /* Cambiar de noche actualiza su bloque y la marca «noche seleccionada» del bloque de período. */
+  const setDia=(d,ir)=>{ PST.dia=d; $('p-fecha').value=d; renderProc(); if(ir) $('p-noche').scrollIntoView({behavior:'smooth',block:'start'}); };
+  $('p-fecha').addEventListener('change',()=>{ const v=$('p-fecha').value; if(v) setDia(nearestDay(v,1)); });
+  $('p-prev').addEventListener('click',()=>{ const i=allDays.indexOf(PST.dia); if(i>0) setDia(allDays[i-1]); });
+  $('p-next').addEventListener('click',()=>{ const i=allDays.indexOf(PST.dia); if(i<allDays.length-1) setDia(allDays[i+1]); });
+  $('p-gantt-h').addEventListener('change',()=>renderGantt(PST.dia));
+  const pdch=()=>{ const a=pdate($('p-desde').value), b=pdate($('p-hasta').value); if(isNaN(a)||isNaN(b)||b<a) return; PST.desde=a; PST.hasta=b; [...$('p-rango').children].forEach(x=>x.classList.remove('active')); renderPeriodo(); };
+  $('p-desde').addEventListener('change',pdch); $('p-hasta').addEventListener('change',pdch);
+  renderProc();
+  /* Clic en un día de cualquier gráfico o fila del período -> detalle de esa noche (si hubo o habrá batch ese día). */
+  const irNoche=x=>{ const d=String(x).slice(0,10); if(allDays.includes(d)) setDia(d,true); else setDia(nearestDay(d,1),true); };
+  ['p-gen','p-reg','p-dur'].forEach(id=>$(id).on('plotly_click',e=>{ if(e&&e.points&&e.points.length) irNoche(e.points[0].x); }));
+  $('p-tabla-dias').addEventListener('click',e=>{ const r=e.target.closest('tr[data-d]'); if(r) irNoche(r.dataset.d); });
+
+  /* Colas */
+  const cs=$('c-cola'), hs2=$('h-cola');
+  [cs,hs2].forEach(el=>CN.forEach(q=>{ const o=document.createElement('option'); o.value=q; o.textContent=q+' · '+famDe(q); el.appendChild(o); }));
+  /* Una sola cola para el detalle y el simulador: cambiarla en cualquiera de los dos actualiza ambos. */
+  const setCola=(q,ir)=>{ CST.cola=q; cs.value=q; hs2.value=q; resetSim(q); renderColas(); renderPerfilC(); renderCmpC(); renderSim(); renderPanorama();
+    if(ir) $(ir).scrollIntoView({behavior:'smooth',block:'start'}); };
+  cs.addEventListener('change',()=>setCola(cs.value)); hs2.addEventListener('change',()=>setCola(hs2.value));
+  $('c-tabla-colas').addEventListener('click',e=>{ const r=e.target.closest('tr[data-q]'); if(r) setCola(r.dataset.q,'c-bloque-cola'); });
+  $('h-tabla').addEventListener('click',e=>{ const r=e.target.closest('tr[data-q]'); if(r) setCola(r.dataset.q,'h-bloque'); });
+  const num=(id,def)=>{ const v=parseFloat($(id).value); return isNaN(v)?def:v; };
+  const hch=()=>{ HST.extra=num('h-extra',0)/100; HST.margen=Math.max(0,num('h-margen',0))/100; HST.hilos=Math.max(1,Math.round(num('h-hilos',HL.activos[CST.cola]||1)));
+    const w=num('h-w',null); HST.w=(w!=null&&w>0)?w:null; HST.crit=$('h-crit').value; renderSim(); };
+  ['h-extra','h-hilos','h-margen','h-w','h-crit'].forEach(id=>{ $(id).addEventListener('input',hch); $(id).addEventListener('change',hch); });
+  $('h-reset').addEventListener('click',()=>{ resetSim(CST.cola); renderSim(); });
+  $('h-dia').addEventListener('change',()=>{ const v=pdate($('h-dia').value); if(!isNaN(v)){ HST.dia=v; renderSim(); } });
+  resetSim(CST.cola);
+  $('c-perf-fecha').value=dstr(F0D+3*DAY);
+  const chs=$('c-cmp-hora'); for(let h=0;h<24;h++){ const o=document.createElement('option'); o.value=h; o.textContent=String(h).padStart(2,'0')+':00'; chs.appendChild(o); } chs.value=11;
+  llenarTipos($('c-cmp-tipo'), false); $('c-cmp-fecha').value=dstr(F0D+3*DAY);
+  ['c-cmp-tipo','c-cmp-finde','c-cmp-fecha','c-cmp-hora'].forEach(id=>$(id).addEventListener('change',renderCmpC));
+  setRangoPN(90); setRangoC(90); setRangoH(90);
+  /* controles de período de cada bloque: botones y Desde/Hasta */
+  const fechas=(idD,idH,idSeg,st,fn)=>{ const ch=()=>{ const a=pdate($(idD).value), b=pdate($(idH).value); if(isNaN(a)||isNaN(b)||b<a) return; st.desde=a; st.hasta=b; [...$(idSeg).children].forEach(x=>x.classList.remove('active')); if(st===HST) HST.dia=0; fn(); };
+    $(idD).addEventListener('change',ch); $(idH).addEventListener('change',ch); };
+  seg('cp-rango',b=>{ setRangoPN(b.dataset.n); renderPanorama(); });
+  seg('c-rango',b=>{ setRangoC(b.dataset.n); renderColas(); });
+  seg('h-rango',b=>{ setRangoH(b.dataset.n); HST.dia=0; renderSim(); });
+  seg('c-res',b=>{ CST.res=b.dataset.v; renderColas(); });
+  fechas('cp-desde','cp-hasta','cp-rango',PNC,renderPanorama);
+  fechas('c-desde','c-hasta','c-rango',CST,renderColas);
+  fechas('h-desde','h-hasta','h-rango',HST,renderSim);
+  $('c-perf-fecha').addEventListener('change',renderPerfilC);
+  renderPanorama(); renderColas(); renderPerfilC(); renderCmpC(); renderSim();
+  /* clic en un día del gráfico de la cola -> su perfil horario (el gráfico debe existir antes de escuchar) */
+  $('h-chart').on('plotly_click',e=>{ if(!(e&&e.points&&e.points.length)) return; const v=pdate(String(e.points[0].x).slice(0,10)); if(isNaN(v)) return; HST.dia=v; $('h-dia').value=dstr(v); renderSim(); $('h-calor').scrollIntoView({behavior:'smooth',block:'center'}); });
+  $('c-chart').on('plotly_click',e=>{ if(!(e&&e.points&&e.points.length)) return; $('c-perf-fecha').value=String(e.points[0].x).slice(0,10); renderPerfilC(); $('c-perf-card').scrollIntoView({behavior:'smooth',block:'start'}); });
+
+  /* Reposting: la tabla del detalle se elige en su selector o con una fila del panorama. */
+  const rs=$('rd-tabla'); RT.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t+' · '+RET[t]; rs.appendChild(o); });
+  const setTabla=(t,ir)=>{ RDS.tabla=t; rs.value=t; renderTablaR(); renderCmpR(); renderTablaRP(rDias(RPS.desde,RPS.hasta)); if(ir) $(ir).scrollIntoView({behavior:'smooth',block:'start'}); };
+  rs.addEventListener('change',()=>setTabla(rs.value));
+  $('rp-tabla').addEventListener('click',e=>{ const r=e.target.closest('tr[data-t]'); if(r) setTabla(r.dataset.t,'rd-bloque'); });
+  seg('rd-met',b=>{ RDS.met=b.dataset.v; renderTablaR(); renderCmpR(); });
+  rRango(RPS,90,'rp-desde','rp-hasta'); rRango(RDS,90,'rd-desde','rd-hasta');
+  seg('rp-rango',b=>{ rRango(RPS,b.dataset.n,'rp-desde','rp-hasta'); renderPanoramaR(); });
+  seg('rd-rango',b=>{ rRango(RDS,b.dataset.n,'rd-desde','rd-hasta'); renderTablaR(); });
+  fechas('rp-desde','rp-hasta','rp-rango',RPS,renderPanoramaR);
+  fechas('rd-desde','rd-hasta','rd-rango',RDS,renderTablaR);
+  llenarTipos($('rd-cmp-tipo'), true, 'sin reposting'); $('rd-cmp-fecha').value=RP.fd[0];
+  ['rd-cmp-tipo','rd-cmp-fecha'].forEach(id=>$(id).addEventListener('change',renderCmpR));
+  renderPanoramaR(); renderTablaR(); renderCmpR();
+  /* clic en un día del gráfico de la tabla -> esa noche como base de la comparación */
+  $('rd-chart').on('plotly_click',e=>{ if(!(e&&e.points&&e.points.length)) return; $('rd-cmp-fecha').value=String(e.points[0].x).slice(0,10); renderCmpR(); $('rd-cmp-fecha').scrollIntoView({behavior:'smooth',block:'center'}); });
+}
+try { init(); if(location.hash){ const b=document.querySelector('.tabs button[data-tab="'+location.hash.slice(1)+'"]'); if(b) b.click(); } } catch(e){ errBox.style.display='block'; errBox.textContent += 'init: ' + (e.stack||e) + '\n'; }
+})();
+</script>
+</body>
+</html>

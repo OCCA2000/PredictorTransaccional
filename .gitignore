@@ -1,0 +1,65 @@
+# ============================================================
+# Datos de la operación bancaria: NUNCA al repositorio
+# ============================================================
+# data/raw: conteos de transacciones, ejecuciones de procesos y la bitácora RITM del scheduler.
+# data/processed: derivados de lo anterior (tablas limpias, pronósticos, bandas, backtest, JSON, Excel).
+# Se conserva solo la estructura de carpetas con un .gitkeep.
+data/*
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Cualquier Excel/CSV/JSON suelto de datos, en cualquier carpeta
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.csv.gz
+*.parquet
+
+# ============================================================
+# Dashboard generado
+# ============================================================
+# dashboard.html lleva incrustados todos los datos (histórico, pronóstico y backtest en JSON), así que
+# equivale a publicar la data. Se regenera con dashboard/build_dashboard.py.
+dashboard/dashboard.html
+dashboard/*.html
+!dashboard/dashboard_template.html
+
+# ============================================================
+# Secretos y credenciales (por si se agregan después)
+# ============================================================
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+secrets/
+credentials*
+
+# ============================================================
+# Python y entorno
+# ============================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ============================================================
+# Editor, sistema operativo y herramientas locales
+# ============================================================
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+*.tmp
+*.log
