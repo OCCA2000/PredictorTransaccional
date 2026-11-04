@@ -27,8 +27,16 @@ H_DIURNAS = range(7, 21)  # 07:00-20:59, donde una caída no puede ser el arranq
 
 def main():
     t = pd.read_csv(CSV, sep=";", encoding="utf-8-sig")
-    t["hora"] = pd.to_datetime(t["HORA"])
-    t = t.drop(columns="HORA").rename(columns={"Financiero": "fin", "No Financiero": "nofin"}).set_index("hora").sort_index()
+    # Soportar tanto "HORA" como "FECHA_HORA"
+    col_hora = "FECHA_HORA" if "FECHA_HORA" in t.columns else "HORA"
+    t["hora"] = pd.to_datetime(t[col_hora])
+    t = t.drop(columns=col_hora)
+    # Normalizar nombres de columnas (puede ser "Financiero"/"No Financiero" o "FINANCIERO"/"NO FINANCIERO")
+    rename_map = {}
+    for old, new in [("Financiero", "fin"), ("FINANCIERO", "fin"), ("No Financiero", "nofin"), ("NO FINANCIERO", "nofin")]:
+        if old in t.columns:
+            rename_map[old] = new
+    t = t.rename(columns=rename_map).set_index("hora").sort_index()
     n_raw = len(t)
     assert not t.index.duplicated().any()
     t = t[t.index >= INICIO]

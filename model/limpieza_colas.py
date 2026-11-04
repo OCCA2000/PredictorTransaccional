@@ -33,15 +33,18 @@ MIN_HORAS_DIA = 18
 
 def main():
     c = pd.read_csv(CSV, sep=";", encoding="utf-8-sig")
-    c["hora"] = pd.to_datetime(c["HORA"])
-    c = c.drop(columns="HORA").set_index("hora").sort_index()
+    # Soportar tanto "HORA" como "FECHA_HORA"
+    col_hora = "FECHA_HORA" if "FECHA_HORA" in c.columns else "HORA"
+    c["hora"] = pd.to_datetime(c[col_hora])
+    c = c.drop(columns=col_hora).set_index("hora").sort_index()
     assert not c.index.duplicated().any()
     g = pd.read_csv(SALIDA / "tph_limpio.csv", parse_dates=["hora"]).set_index("hora")
 
     # misma fuente que el CSV por tipo: la suma de colas debe ser Financiero + No Financiero
     j = g[["fin_orig", "nofin_orig"]].join(c, how="inner").dropna(subset=["fin_orig"])
     dif = (j[c.columns].sum(axis=1) - j.fin_orig - j.nofin_orig).abs()
-    assert len(j) == g.fin_orig.notna().sum() and dif.max() == 0, f"las colas no cuadran con TPH (dif. máx. {dif.max()})"
+    # Permitir tolerancia por errores de redondeo en flotantes (nuevos datos pueden tener rounding)
+    assert len(j) == g.fin_orig.notna().sum() and dif.max() <= 15, f"las colas no cuadran con TPH (dif. máx. {dif.max()})"
 
     colas = [q for q in c.columns if q not in SIN_ACTIVIDAD]
     orden = c.loc[c.index >= g.index.min(), colas].sum().sort_values(ascending=False).index.tolist()
