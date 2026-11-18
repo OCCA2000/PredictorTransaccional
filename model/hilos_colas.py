@@ -1,5 +1,5 @@
 """Hilos por cola: referencia medida de DEP (AnalisisColas.xlsx) y estimación de las demás colas con su tiempo
-de servicio promedio (Resumen_TXN_y_Tiempos_X_COLAS_*.txt).
+de servicio promedio (TXN_GRUPO_X_TIEMPO_RESPUESTA_CONSOLIDADO.csv + Cat_TXN_Cola_ACT.xlsx).
 
 1) DEP, medida. El Excel trae un día (2026-09-15) segundo a segundo de la cola «IN», que es DEP en el CSV de
    colas (se verifica aquí: mismas transacciones por hora de 06:00 a 19:00). Su fórmula, por hora:
@@ -11,10 +11,9 @@ de servicio promedio (Resumen_TXN_y_Tiempos_X_COLAS_*.txt).
        k      = hilos por transacción/hora = rafaga x w90 / 1000 x f / 3600   ->  hilos(TPH) = TPH x k
    En el día de muestra reproduce el Excel. Las horas 00-04 no están completas: usan las razones de las 05:00.
 
-2) Demás colas, estimadas. Los reportes diarios de tiempos (data/raw/.../REPORTE TIEMPO PROMEDIO POR COLA, un
-   archivo por día laborable) dan el tiempo de respuesta promedio por cola (solo procesamiento, sin espera), en
-   segundos con dos decimales. Se promedian todos los días ponderando por transacciones; como cada día viene
-   redondeado a 10 ms, se usa el extremo alto (w_hi = promedio + 5 ms). Con eso se conoce la carga media L = TPS x W (hilos ocupados en promedio),
+2) Demás colas, estimadas. El histograma de tiempos por transacción y día (Archivos de entrada/TXN_GRUPO_X_TIEMPO_RESPUESTA_CONSOLIDADO.csv,
+   ms) se asigna a su cola con Cat_TXN_Cola_ACT.xlsx y se promedia ponderando por transacciones desde REGIMEN_DESDE
+   (se descartan los tiempos negativos: el RESUMEN los promedia y sale sesgado). Con eso se conoce la carga media L = TPS x W (hilos ocupados en promedio),
    pero no las ráfagas. El salto de la carga media al P90 y al máximo se calibra con DEP, donde se midieron los tres:
        L = TPS x w_hi x c_w / 1000          hilos(L) = L + z x RAIZ(L)
    z resulta estable entre horas con cargas muy distintas (P90: 2,2-3,0; máximo: 6,6-12,9), a diferencia de un

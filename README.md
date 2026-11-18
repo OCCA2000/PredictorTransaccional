@@ -16,10 +16,8 @@ nuevo tiene 8,7 %.
 | `RESUMEN_CONTEO_POR_HORA_TIPO_HISTORICO_2024_2026.csv` | `HORA;Financiero;No Financiero` |
 | `RESUMEN_CONTEO_POR_HORA_COLA_HISTORICO_2024_2026.csv` | `HORA;` + 20 colas. Las mismas transacciones del archivo por tipo, repartidas por cola (la suma coincide hora a hora) |
 | `AnalisisColas.xlsx` | simulador de concurrencia con un día (2026-09-15) segundo a segundo de la cola «IN», que es DEP. Solo se lee la hoja `DatosentradaSeg` |
-| `Resumen_TXN_y_Tiempos_X_COLAS_AAAAMMDD.txt` | por cola (código de 2 letras) de un día: pico de transacciones en un segundo, total y tiempo de respuesta máximo, mínimo y promedio (segundos). Se usan todos los que haya en `data/raw` y subcarpetas (hoy 30 días: 1-sep a 13-oct-2026, en `REPORTES TRANSACCIONALES 2610 1210/REPORTE TIEMPO PROMEDIO POR COLA`) |
-| `REPORTES TRANSACCIONALES 2610 1210/PROCESOS CRITICOS/PROCESOS CRITICOS ACUMULADOS.xlsx` | versión de oct-2026 del archivo de procesos: mismas filas que `PROCESOS_CRITICOS_ACUMULADOS.xlsx` más bnccrn2dcm y bncd0801. Es la que se usa |
+| `Archivos de entrada - Corte 2026-10-27/TXN_GRUPO_X_TIEMPO_RESPUESTA_CONSOLIDADO.csv` | histograma de tiempos (ms) por día y código de transacción; se asigna a la cola con `Cat_TXN_Cola_ACT.xlsx` y se promedia desde 10-mar-2026 descartando los tiempos negativos (el `..._RESUMEN.csv` los promedia y sale sesgado, p. ej. DEP el 15-sep). Reemplaza a los `Resumen_TXN_y_Tiempos_X_COLAS_*.txt` |
 | `PROCESOS_CRITICOS_ACUMULADOS.xlsx` | ejecuciones de procesos (hoja 1) y mapeo de días (hoja 2). Las columnas DESCRIPCIÓN y RESPONSABLE **no se leen** |
-| `RITM1037408.xlsx` | bitácora del scheduler, solo para verificar. Solo se leen Job Name, Start Time y End Time |
 | `Reposting.xlsx` | registro diario del reposting (8 tablas, una hoja por mes). Las columnas se ubican por el encabezado de cada hoja (desde oct-2025 vienen corridas una columna). Las notas de la celda de fecha («depuración», «prueba», «se ejecutó el…») se leen para excluir o reubicar corridas |
 
 ## Cómo correr todo (desde la raíz, en este orden)

@@ -1,6 +1,17 @@
 """Limpieza de data/raw/Reposting.xlsx -> data/processed/reposting_limpio.csv y reposting_excluidas.csv
 
 El archivo trae una hoja por mes con bloques de 8 filas (IMG1..IMG8) por fecha: hora de inicio y fin, tiempo total y TRX.
+
+Función auxiliar para corregir fechas mal formateadas (nov-2026 en adelante):"""
+import re
+
+def _arreglar_texto(v):
+    """Corrige la barra faltante «0511/2026» (nov-2026) -> «05/11/2026»."""
+    return re.sub(r"^(\d{2})(\d{2})/(\d{4})", r"\1/\2/\3", v.strip()) if isinstance(v, str) else v
+
+
+"""
+Reglas (revisadas con el usuario el 2026-10-22):
 Reglas (revisadas con el usuario el 2026-10-22):
   - Día de negocio. El reposting de un día hábil corre la madrugada siguiente. Hasta el lunes 21-jul-2025 el archivo
     anotaba la fecha de esa madrugada (la hoja «Instrucciones» lo llama «día de reposting»): el día de negocio es el día
@@ -32,7 +43,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 XLSX = RAIZ / "data/raw/Reposting.xlsx"
 SALIDA = RAIZ / "data/processed"
 TABLAS = ["IMG1", "IMG2", "IMG3", "IMG4", "IMG5", "IMG6", "IMG7", "IMG8"]
-FIN_DIA_NEGOCIO = pd.Timestamp("2026-09-25")
+FIN_DIA_NEGOCIO = pd.Timestamp("2026-11-05")
 CAMBIO_FECHA = pd.Timestamp("2025-07-21")         # desde la 2.ª corrida de este día la fecha es el día de negocio
 NOTA = re.compile(r"depur|prueba", re.I)
 # notas de depuración escritas fuera de la celda de la fecha: «Diciembre - Depuracion» (debajo de la 2.ª corrida del

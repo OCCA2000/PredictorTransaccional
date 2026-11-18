@@ -1513,7 +1513,7 @@ function renderHilosTabla(filas, dias){
   rows.forEach(r=>{ const q=r.q, sel=q===CST.cola;
     const sobra=v=>v!=null&&v>HL.max?' <span class="tag" style="color:var(--crit);border-color:var(--crit)">supera '+HL.max+'</span>':'';
     h+='<tr data-q="'+q+'" style="cursor:pointer'+(sel?';background:var(--brand-soft)':'')+'"><td><b>'+q+'</b></td><td class="num">'+r.n+'</td>'
-      +'<td class="num" title="pico de '+HL.w[q][3]+' transacciones en un segundo">'+fW(q)+'</td><td class="num">'+(r.carga==null?'—':nf1.format(r.carga)+' hilos')+'</td>'
+      +'<td class="num">'+fW(q)+'</td><td class="num">'+(r.carga==null?'—':nf1.format(r.carga)+' hilos')+'</td>'
       +'<td class="num">'+(r.p==null?'—':(r.pl!=null&&r.pl<r.p?r.pl+'–'+r.p:r.p))+sobra(r.p)+'</td>'+uso(r.p,r.n)
       +'<td class="num">'+(r.m==null?'—':r.m)+sobra(r.m)+'</td>'+uso(r.m,r.n)+'</tr>'; });
   $('h-tabla').innerHTML=h+'</tbody>';

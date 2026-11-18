@@ -239,7 +239,7 @@ def main():
             req, rmx = techo(HC.hilos_estimados(p90h.max(), x.w_hi, calib, "p90")), techo(HC.hilos_estimados(p90h.max(), x.w_hi, calib, "max"))
             bajo = max(1, techo(HC.hilos_estimados(p90h.max(), x.w_lo, calib, "p90")))
         filas.append({"Cola": x.cola, "Hilos activos": x.hilos_activos, "Máximo": x.hilos_max, "Margen": x.hilos_max - x.hilos_activos,
-                      "T. servicio promedio (ms)": x.w_ms, "T. servicio usado (ms)": x.w_ms if x.medida else x.w_hi, "Pico en un segundo (trx)": x.max_txn_seg,
+                      "T. servicio promedio (ms)": x.w_ms, "T. servicio usado (ms)": x.w_ms if x.medida else x.w_hi,
                       "TPS pico real": x.tps_pico, "Fecha del pico real": x.pico_cuando, "Pico pronosticado P90, 90 días (TPS)": p90h.max() / 3600,
                       "Pico pronosticado / pico real": p90h.max() / x.tph_pico, "Hilos req. P90 (mínimo por redondeo)": bajo, "Hilos req. P90": req,
                       "Uso P90": req / x.hilos_activos, "Hilos req. máximo": rmx, "Uso máximo": rmx / x.hilos_activos,

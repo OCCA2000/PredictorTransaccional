@@ -130,7 +130,7 @@ def hilos():
     c = pd.read_csv(SALIDA / "hilos_calibracion.csv").iloc[0]
     return {"max": int(t.hilos_max.iloc[0]), "medida": t.cola[t.medida].iloc[0], "fecha_muestra": str(r.fecha_muestra.iloc[0]),
             "fecha_tiempos": str(c.fecha_tiempos), "cal": {"z_p90": float(c.z_p90), "z_max": float(c.z_max), "c_w": float(c.c_w)},
-            "w": {x.cola: [float(x.w_ms), float(x.w_lo), float(x.w_hi), int(x.max_txn_seg)] for x in t.itertuples()},
+            "w": {x.cola: [float(x.w_ms), float(x.w_lo), float(x.w_hi)] for x in t.itertuples()},
             "activos": {x.cola: int(x.hilos_activos) for x in t.itertuples()},
             "pico": {x.cola: [round(float(x.tph_pico)), str(x.pico_cuando)[:16]] for x in t.itertuples()},
             "ref": [[float(x.rafaga), float(x.w90), float(x.f_p90), float(x.f_max), int(bool(x.coincide)), float(x.k_p90), float(x.k_max)] for x in r.itertuples()]}
